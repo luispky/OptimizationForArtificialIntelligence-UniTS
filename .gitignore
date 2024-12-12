@@ -1,0 +1,13 @@
+# Project-related
+figures/
+results/
+ideas/
+
+# Pycharm
+__pycache__/
+
+# venv
+.env/
+
+# VSCode
+.vscode/
