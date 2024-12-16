@@ -1,14 +1,14 @@
 import numpy as np
 from typing import List, Tuple, Dict, Union
 from scipy.stats import chisquare
-import random
+import numpy as np
 
-def random_choice(p: float = 0.5) -> str:
+def random_choice(p: float = 0.5):
     if p == 0:
             return 'D'  
     elif p == 1:
         return 'C'  
-    return 'C' if random.random() < p else 'D'
+    return 'C' if np.random.rand() < p else 'D'
 
 class Strategy:
     def __init__(self, name: str):
@@ -28,7 +28,7 @@ class TitFortat(Strategy):
         super().__init__("TitForTat")
         
     def play(self, opponent):
-        if not self.history:
+        if len(self.history) == 0:
             return 'C'
         if opponent.history[-1] == 'D':
             return 'D'
@@ -66,7 +66,7 @@ class Random(Strategy):
     
     def play(self, opponent):
         return random_choice(self.p)
-    
+
 class FirstByAnonymous(Strategy):
     """
     A strategy that randomly cooperates with a probability uniformly distributed 
@@ -78,7 +78,7 @@ class FirstByAnonymous(Strategy):
 
     def play(self, opponent: Strategy) -> str:
         # Randomly choose a cooperation probability between 30% and 70%
-        r = random.uniform(3, 7) / 10
+        r = np.random.uniform(3, 7) / 10
         # Use the random_choice function to decide whether to cooperate or defect
         return random_choice(r)
 
@@ -99,7 +99,7 @@ class FirstByJoss(Strategy):
         self.p = p
 
     def play(self, opponent: Strategy) -> str:
-        if not opponent.history:
+        if len(opponent.history) == 0:
             return 'C'  # Cooperate on the first move
 
         if opponent.history[-1] == 'D':
@@ -119,12 +119,9 @@ class Grudger(Strategy):
         self.opponent_defected = False
 
     def play(self, opponent: Strategy) -> str:
-        if self.opponent_defected:
-            return 'D'  # If opponent has defected at any point, defect forever.
-        
         if 'D' in opponent.history:
             self.opponent_defected = True  # Mark if opponent defects
-            return 'D'  # First time opponent defects, defect
+            return 'D'  # If opponent has defected at any point, defect forever.
         
         return 'C'  # Cooperate until the opponent defects
     
@@ -472,10 +469,10 @@ class FirstByGraaskamp(Strategy):
 
         # Randomly defect every 5 to 15 moves
         if self.next_random_defection_turn is None:
-            self.next_random_defection_turn = random.randint(5, 15) + len(self.history)
+            self.next_random_defection_turn = np.random.randint(5, 16) + len(self.history)
 
         if len(self.history) == self.next_random_defection_turn:
-            self.next_random_defection_turn = random.randint(5, 15) + len(self.history)
+            self.next_random_defection_turn = np.random.randint(5, 16) + len(self.history)
             return 'D'
         
         return 'C'

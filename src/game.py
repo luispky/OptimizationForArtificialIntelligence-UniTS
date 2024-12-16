@@ -1,7 +1,7 @@
+import copy
 import numpy as np
-import random
 from .strategies import Strategy
-from typing import List, Tuple, Dict, Union
+from typing import List, Tuple, Dict, Union, final
 from math import ceil, log
 
 PAYOFF_MATRIX = {
@@ -15,7 +15,6 @@ def set_seed(seed: Union[int, None] = 42) -> None:
     """Sets the seed for both numpy and Python's random module."""
     if seed is not None:
         np.random.seed(seed)
-        random.seed(seed)
 
 class Match:
     """Class to simulate a match between two players with optional noise and a probability of ending."""
@@ -31,6 +30,8 @@ class Match:
         :param seed: Seed for reproducibility.
         """
         self.seed = seed
+        set_seed(self.seed)
+        
         self.players = players
         self.turns = turns
         self.noise = noise
@@ -38,8 +39,6 @@ class Match:
         self.moves = []
         self.winner = None
         self.final_scores = (0, 0)
-        random.seed(self.seed)
-        np.random.seed(self.seed)
 
     def _flip_action(self, action: str) -> str:
         """Flips the action with a probability defined by the noise."""
@@ -90,7 +89,7 @@ class Match:
 class Tournament:
     """Class to simulate a round-robin tournament between multiple strategies."""
 
-    def __init__(self, players: List[Strategy], turns: int, repetitions: int = 1, noise: float = 0.0, prob_end: float = 0., seed: Union[int, None] = 42):
+    def __init__(self, players: List[Strategy], turns: int, repetitions: int = 1, noise: float = 0.0, prob_end: float = 0., seed: Union[int, None] = 42, axelrod: bool = False):
         """
         Initializes the tournament.
 
@@ -102,7 +101,7 @@ class Tournament:
         :param seed: Seed for reproducibility.
         """
         self.seed = seed
-        random.seed(self.seed)
+        set_seed(self.seed)
         
         self.players = players
         self.turns = turns
@@ -110,6 +109,7 @@ class Tournament:
         self.noise = noise
         self.prob_end = prob_end
         self.scores = {player.name: [] for player in players}
+        self.axelrod = axelrod
 
     def play_match(self, player1: Strategy, player2: Strategy) -> Tuple[int, int]:
         """Plays a match between two players and returns their final scores."""
@@ -128,6 +128,11 @@ class Tournament:
                     final_scores = self.play_match(player1, player2)
                     matches_scores[player1.name].append(final_scores[0])
                     matches_scores[player2.name].append(final_scores[1])
+                if self.axelrod:
+                    player1 = self.players[i]
+                    player2 = copy.deepcopy(player1)
+                    final_scores = self.play_match(player1, player2)
+                    matches_scores[player1.name].append(final_scores[0])
 
             for player in self.players:
                 self.scores[player.name].append(sum(matches_scores[player.name]))
@@ -137,6 +142,13 @@ class Tournament:
         if not self.scores:
             raise ValueError("The tournament has not been played yet.")
         
-        ranked_results = {player: float(np.mean(scores)) for player, scores in self.scores.items()}
+        ranked_results = {player: float(np.mean(scores)/self.repetitions) for player, scores in self.scores.items()}
         ranked_results = dict(sorted(ranked_results.items(), key=lambda item: item[1], reverse=True))
         return ranked_results
+    
+    def print_ranked_results(self) -> None:
+        """Prints the ranked results of the tournament."""
+        ranked_results = self.get_ranked_results()
+        print("\nRanked results:")
+        for i, (player, score) in enumerate(ranked_results.items()):
+            print(f"{i + 1}. {player}: {score:.2f}")
