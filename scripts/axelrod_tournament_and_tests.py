@@ -1,5 +1,4 @@
-import random
-from src.strategies import (TitFortat,
+from src.strategies import (TitForTat,
                             Alternator,
                             Defector,
                             Cooperator,
@@ -19,93 +18,131 @@ from src.strategies import (TitFortat,
                             FirstByAnonymous,
 )
 from src.game import Match, Tournament
+from src.utils import set_seeds
 import numpy as np
 import axelrod as axl
 import argparse
 
+set_seeds(42)
+
 def test_match():
     """Test the Match class"""
     print("\nTesting Match class")
-    players = [Alternator(), TitFortat()]
-    # players = [TitFortat(), Random()]
-    match = Match(players, turns=6, prob_end=0.1, seed=42)
+    
+    print(f"\nTitForTat vs Alternator")
+    players = [TitForTat(), Alternator()]
+    match = Match(players, turns=6, prob_end=0.01, seed=42)
     moves = match.play()
     print(f"\nMoves: \n {moves}")
     print(f"Winner: {match.winner}")
     print(f"Final scores: {match.final_scores}")
     
-    print(f"\n{"-"*50}")
+    print(f"\n{'-'*75}")
+    
+    print(f"\n TitForTat vs Random")
+    players = [TitForTat(), Random()]
+    match = Match(players, turns=6, prob_end=0.01, seed=42)
+    moves = match.play()
+    print(f"\nMoves: \n {moves}")
+    print(f"Winner: {match.winner}")
+    print(f"Final scores: {match.final_scores}")
+    
+    print(f"\n{'-'*75}")
     
 def test_match_library():
     """Test the Match class from Axelrod library"""
     print("\nTesting Match class from Axelrod library")
-    # players = [axl.Alternator(), axl.TitForTat()]
-    players = [axl.TitForTat(), axl.Random()] 
-    # axl.Random(p=0.5) has an additional stochasticity
-    # the same is true for stochastic strategies in the axelrod library
-    # at run time it changes the seed for the random number generator
     
-    match = axl.Match(players, turns=6, prob_end=0.1, seed=42)
+    print(f"\nTitForTat vs Alternator")
+    players = [axl.TitForTat(), axl.Alternator()]
+    match = axl.Match(players, turns=6, prob_end=0.01, seed=42)
     moves = match.play()
     print(f"\nMoves: \n {moves}")
     print(f"Winner: {match.winner()}")
     print(f"Final scores: {match.final_score()}")
     
-    print(f"\n{"-"*50}")
+    print(f"\n{'-'*75}")
+    
+    print(f"\nTitForTat vs Random")
+    players = [axl.TitForTat(), axl.Random()]
+    match = axl.Match(players, turns=6, prob_end=0.01, seed=42)
+    moves = match.play()
+    print(f"\nMoves: \n {moves}")
+    print(f"Winner: {match.winner()}")
+    print(f"Final scores: {match.final_score()}")
+    
+    print(f"\n{'-'*75}")
     
 def test_tournament():
     """Test the Tournament class"""
     print("\nTesting Tournament class")
+
+    repetitions = 5 # Makes sense only with stochastic strategies and fixed seed
+    turns = 200
+
     players = [
         Cooperator(),
         Defector(),
-        TitFortat(),
-        Alternator(), 
-        # Random(p=0.5)
+        TitForTat(),
+        Alternator(),
+        Random(), 
     ]
-    tournament = Tournament(players, turns=10, repetitions=5, noise=0.0, prob_end=0.0, seed=42)
+    tournament = Tournament(players, turns=turns, repetitions=repetitions)
     tournament.play()
     
     tournament.print_ranked_results()
     
-    print(f"\n{"-"*50}")
+    print(f"\nScores per match:")
+    for player, scores in tournament.scores.items():
+        print(f"{player}: {scores}")
+    
+    print(f"\n{'-'*75}")
     
 def test_tournament_library():
     """Test the Tournament class from Axelrod library"""
     print("\nTesting Tournament class from Axelrod library")
     
-    REPETITIONS = 5
-    PROB_END = 0.01
-    TURNS = 10
+    repetitions = 5
+    turns = 200
     
     players = [
         axl.Cooperator(),
         axl.Defector(),
         axl.TitForTat(),
         axl.Alternator(), 
-        axl.Random(p=0.5)
+        axl.Random(),
     ]
-    tournament = axl.Tournament(players, turns=TURNS, repetitions=REPETITIONS, noise=0.0, prob_end=PROB_END, seed=42)
+    tournament = axl.Tournament(players, turns=turns, repetitions=repetitions)
     results = tournament.play(progress_bar=False)
+    
+    # Calculate the mean results
+    mean_results = np.array(results.scores).mean(axis=1)/len(players)
 
-    print("\nRanked results:")
-    mean_results = np.array(results.scores).mean(axis=1)
-    sorted_mean_results = {name: mean_results[i] for name,i in zip(results.ranked_names, results.ranking)}
-    for i, (name, score) in enumerate(sorted_mean_results.items()):
-        print(f"{i+1}. {name}: {score:.2f}")
+    # Create a dictionary of sorted mean results
+    sorted_mean_results = {
+        name: mean_results[i] 
+        for name, i in zip(results.ranked_names, results.ranking)
+    }
+    
+    print(f'{"Rank":>5} {"Name":>45} {"Score":>8}')
+    for i, (name, score) in enumerate(sorted_mean_results.items(), start=1):
+        print(f"{i:>5} {name:>45} {score:>8.2f}")
+    
+    print(f"\nScores per match:")
+    for i, player in enumerate(players):
+        print(f"{player}: {results.scores[i]}")
         
-    print(f"\n{"-"*50}")
-
+    print("-" * 75)
+        
 def axelrod_tournament():
     """Run Axelrod tournament with custom implementations"""
     print("\nRunning Axelrod tournament with custom implementations")
-    
-    REPETITIONS = 5
-    PROB_END = 0.01
-    TURNS = 200
+    turns = 200
+    repetitions = 5
+    prob_end = 0.01
     
     players = [
-        TitFortat(),
+        TitForTat(),
         FirstByTidemanAndChieruzzi(),
         FirstByNydegger(),
         FirstByGrofman(),
@@ -122,20 +159,20 @@ def axelrod_tournament():
         Random(),
     ]
     
-    tournament = Tournament(players, turns=TURNS, repetitions=REPETITIONS, noise=0.0, prob_end=PROB_END, seed=42, axelrod=True)
-    tournament.play()
+    tournament = Tournament(players, turns=turns, repetitions=repetitions, prob_end=prob_end)
+    tournament.play(axelrod=True)
     
     tournament.print_ranked_results()
         
-    print(f"\n{"-"*50}")
+    print(f"\n{'-'*75}")
     
 def axelrod_tournament_library():
     """Run Axelrod tournament with Axelrod library implementations"""
     print("\nRunning Axelrod tournament with Axelrod library implementations")
     
-    REPETITIONS = 5
-    PROB_END = 0.01
-    TURNS = 200
+    turns = 200
+    repetitions = 5
+    prob_end = 0.01
     
     players = [
         axl.TitForTat(),
@@ -156,43 +193,48 @@ def axelrod_tournament_library():
     ]
     
     # Initialize the axelrod Tournament with the specified parameters
-    tournament = axl.Tournament(players, turns=TURNS, repetitions=REPETITIONS, noise=0.0, prob_end=PROB_END, seed=42)
+    tournament = axl.Tournament(players, turns=turns, repetitions=repetitions, prob_end=prob_end, seed=42)
     
     # Play the tournament and capture the results
     results = tournament.play(progress_bar=False)
     
-    # Calculate the mean results for each player
-    mean_results = np.array(results.scores).mean(axis=1)
+    # Calculate the mean results
+    mean_results = np.array(results.scores).mean(axis=1)/len(players)
+
+    # Create a dictionary of sorted mean results
+    sorted_mean_results = {
+        name: mean_results[i] 
+        for name, i in zip(results.ranked_names, results.ranking)
+    }
     
-    # Sort and print the players and their average scores
-    print("\nRanked results:")
-    sorted_mean_results = {name: mean_results[i]/REPETITIONS for name, i in zip(results.ranked_names, results.ranking)}
-    for i, (name, score) in enumerate(sorted_mean_results.items()):
-        print(f"{i+1}. {name}: {score:.2f}")
+    print(f'{"Rank":>5} {"Name":>45} {"Score":>8}')
+    for i, (name, score) in enumerate(sorted_mean_results.items(), start=1):
+        print(f"{i:>5} {name:>45} {score:>8.2f}")
     
     # Plot the results using a boxplot
     plot = axl.Plot(results)
     p = plot.boxplot()
     p.show()
-    input("\nPress Enter to close the plot")
     
-    print(f"\n{"-"*50}")
+    print(f"\n{'-'*75}")
+
+    input("\nPress Enter to close the plot")
 
 # Main function to handle argument parsing and running specific tests
-def main(args):
+def main(args_):
     """
     Main function to run different tests based on user input.
     
     Arguments:
-    - args: Parsed command-line arguments.
+    - args_: Parsed command-line arguments.
     """
-    if args.test == 'match':
+    if args_.test == 'match':
         test_match()
         test_match_library()
-    elif args.test == 'tournament':
+    elif args_.test == 'tournament':
         test_tournament()
         test_tournament_library()
-    elif args.test == 'axelrod_tournament':
+    elif args_.test == 'axelrod_tournament':
         axelrod_tournament()
         axelrod_tournament_library()
     else:
