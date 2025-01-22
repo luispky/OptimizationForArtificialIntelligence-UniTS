@@ -37,8 +37,7 @@ def test_match():
     print(f"Winner: {match.winner}")
     print(f"Final scores: {match.final_scores}")
     
-    print(f"\n{'-'*75}")
-    
+
     print(f"\n TitForTat vs Random")
     players = [TitForTat(), Random()]
     match = Match(players, turns=6, prob_end=0.01, seed=42)
@@ -48,24 +47,23 @@ def test_match():
     print(f"Final scores: {match.final_scores}")
     
     print(f"\n{'-'*75}")
-    
-def test_match_library():
+
+def test_match_axl_library():
     """Test the Match class from Axelrod library"""
-    print("\nTesting Match class from Axelrod library")
+    print("\nMatch class from Axelrod library")
     
     print(f"\nTitForTat vs Alternator")
     players = [axl.TitForTat(), axl.Alternator()]
-    match = axl.Match(players, turns=6, prob_end=0.01, seed=42)
+    match = axl.Match(tuple(players), turns=6, prob_end=0.01, seed=42)
     moves = match.play()
     print(f"\nMoves: \n {moves}")
     print(f"Winner: {match.winner()}")
     print(f"Final scores: {match.final_score()}")
-    
-    print(f"\n{'-'*75}")
-    
+
+
     print(f"\nTitForTat vs Random")
     players = [axl.TitForTat(), axl.Random()]
-    match = axl.Match(players, turns=6, prob_end=0.01, seed=42)
+    match = axl.Match(tuple(players), turns=6, prob_end=0.01, seed=42)
     moves = match.play()
     print(f"\nMoves: \n {moves}")
     print(f"Winner: {match.winner()}")
@@ -95,10 +93,10 @@ def test_tournament():
     print(f"\nScores per match:")
     for player, scores in tournament.scores.items():
         print(f"{player}: {scores}")
-    
+
     print(f"\n{'-'*75}")
     
-def test_tournament_library():
+def test_tournament_axl_library():
     """Test the Tournament class from Axelrod library"""
     print("\nTesting Tournament class from Axelrod library")
     
@@ -166,7 +164,7 @@ def axelrod_tournament():
         
     print(f"\n{'-'*75}")
     
-def axelrod_tournament_library():
+def axelrod_tournament_axl_library():
     """Run Axelrod tournament with Axelrod library implementations"""
     print("\nRunning Axelrod tournament with Axelrod library implementations")
     
@@ -230,13 +228,13 @@ def main(args_):
     """
     if args_.test == 'match':
         test_match()
-        test_match_library()
+        test_match_axl_library()
     elif args_.test == 'tournament':
         test_tournament()
-        test_tournament_library()
+        test_tournament_axl_library()
     elif args_.test == 'axelrod_tournament':
         axelrod_tournament()
-        axelrod_tournament_library()
+        axelrod_tournament_axl_library()
     else:
         print("Invalid test type. Available options are: 'match', 'tournament', 'axelrod_tournament'")
 
