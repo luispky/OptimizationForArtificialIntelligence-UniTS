@@ -324,7 +324,7 @@ class EvolutionaryIterativePrisonersDilemma:
         num_evo_players: int = 10,
         turns: int = 100,
         generations: int = 10,
-        action_history_size: int = 10,
+        action_history_size: int = 2,
         mutation_rate: float = 0.1,
         noise: float = 0.0,
         prob_end: float = 0.0,

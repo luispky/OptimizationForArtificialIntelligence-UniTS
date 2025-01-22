@@ -21,6 +21,7 @@ class EvoStrategy(Player):
         name = name or self._generate_name()
         super().__init__(name)
         self.parents: Tuple[str, str] = ('', '')  # Track parent names
+        self.stochastic = True
         self.state_size = action_history_size + 6
         self.weights = self._rng.rand(self.state_size)
         self._state_scaler = MinMaxScaler()

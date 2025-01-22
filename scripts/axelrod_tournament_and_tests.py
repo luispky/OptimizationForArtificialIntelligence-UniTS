@@ -25,6 +25,7 @@ import argparse
 
 set_seeds(42)
 
+
 def test_match():
     """Test the Match class"""
     print("\nTesting Match class")
@@ -48,6 +49,7 @@ def test_match():
     
     print(f"\n{'-'*75}")
 
+
 def test_match_axl_library():
     """Test the Match class from Axelrod library"""
     print("\nMatch class from Axelrod library")
@@ -70,7 +72,8 @@ def test_match_axl_library():
     print(f"Final scores: {match.final_score()}")
     
     print(f"\n{'-'*75}")
-    
+
+
 def test_tournament():
     """Test the Tournament class"""
     print("\nTesting Tournament class")
@@ -90,12 +93,9 @@ def test_tournament():
     
     tournament.print_ranked_results()
     
-    print(f"\nScores per match:")
-    for player, scores in tournament.scores.items():
-        print(f"{player}: {scores}")
-
     print(f"\n{'-'*75}")
-    
+
+
 def test_tournament_axl_library():
     """Test the Tournament class from Axelrod library"""
     print("\nTesting Tournament class from Axelrod library")
@@ -126,12 +126,9 @@ def test_tournament_axl_library():
     for i, (name, score) in enumerate(sorted_mean_results.items(), start=1):
         print(f"{i:>5} {name:>45} {score:>8.2f}")
     
-    print(f"\nScores per match:")
-    for i, player in enumerate(players):
-        print(f"{player}: {results.scores[i]}")
-        
     print("-" * 75)
-        
+
+
 def axelrod_tournament():
     """Run Axelrod tournament with custom implementations"""
     print("\nRunning Axelrod tournament with custom implementations")
