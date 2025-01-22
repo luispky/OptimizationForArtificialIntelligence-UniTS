@@ -21,15 +21,16 @@ class EvoStrategy(Player):
         name = name or self._generate_name()
         super().__init__(name)
         self.parents: Tuple[str, str] = ('', '')  # Track parent names
+        self.stochastic = True
         self.state_size = action_history_size + 6
         self.weights = self._rng.rand(self.state_size)
         self._state_scaler = MinMaxScaler()
         self._state = np.zeros(self.state_size, dtype=np.float64)
-        self._actions_history = None
+        self._memory = None
         if action_history_size > 0:
             num_true = action_history_size // 2
-            self._actions_history = np.array([True] * num_true + [False] * (action_history_size - num_true))
-            self._rng.shuffle(self._actions_history)
+            self._memory = np.array([True] * num_true + [False] * (action_history_size - num_true))
+            self._rng.shuffle(self._memory)
         self._full_history = []
 
     @classmethod
@@ -54,18 +55,19 @@ class EvoStrategy(Player):
             opponent.defections,
             opponent.score
         ])
-        state_integers = self._state_scaler.fit_transform(state_integers.reshape(-1, 1)).flatten()
-        if self._actions_history is not None:
-            self._state = np.concatenate((self._actions_history, state_integers))
-        else:
-            self._state = state_integers
+        normalized_state = self._state_scaler.fit_transform(state_integers.reshape(-1, 1)).flatten()
+        if self._memory is not None:
+            full_state = np.concatenate((self._memory, normalized_state))
+            normalized_state = self._state_scaler.transform(full_state.reshape(-1, 1)).flatten()
+        self._state = normalized_state
+        
         return self._state
 
     def update(self, move: str, score: int) -> None:
         super().update(move, score)
-        if self._actions_history is not None:
-            self._actions_history = np.roll(self._actions_history, -1)
-            self._actions_history[-1] = (False if move == 'D' else True)
+        if self._memory is not None:
+            self._memory = np.roll(self._memory, -1)
+            self._memory[-1] = (False if move == 'D' else True)
 
     def strategy(self, opponent: Player) -> str:
         self.get_state(opponent)

@@ -32,21 +32,6 @@ def match_against_evo(player: Player, turns: int, evo_action_history_size: int) 
     plot_full_history_evo_player(players[1])
     print("\n" + "-" * 50)
 
-
-def test_evo_match(turns: int, evo_action_history_size: int) -> None:
-    """
-    Test the Match class with two EvoStrategy players.
-
-    Args:
-        turns (int): Number of turns for the match.
-        evo_action_history_size (int): Action history size for EvoStrategy.
-    """
-    print("\nTesting Match class with two EvoStrategy players")
-    evo1 = EvoStrategy(name="Evo1", action_history_size=evo_action_history_size)
-    # Showcase that the action history size can be different for each EvoStrategy player
-    match_against_evo(evo1, turns, 2*evo_action_history_size)
-
-
 def test_match(turns: int, evo_action_history_size: int) -> None:
     """
     Test the Match class with various players against an EvoStrategy.
@@ -56,7 +41,9 @@ def test_match(turns: int, evo_action_history_size: int) -> None:
         evo_action_history_size (int): Action history size for EvoStrategy.
     """
     print("\nTesting Match class with one EvoStrategy player")
-    test_players = [Alternator(), TitForTat(), Random(), FirstByTidemanAndChieruzzi()]
+    # Showcase that the action history size can be different for each EvoStrategy player
+    evo1 = EvoStrategy(name="Evo1", action_history_size=evo_action_history_size//2)
+    test_players = [evo1, Alternator(), TitForTat(), Random(), FirstByTidemanAndChieruzzi()]
 
     for player in test_players:
         match_against_evo(player, turns, evo_action_history_size)
@@ -101,26 +88,23 @@ def main() -> None:
     )
 
     # General parameters
-    parser.add_argument("--test", choices=["evo_match", "match", "tournament"], required=True, help="Specify which test to run.")
+    parser.add_argument("--test", choices=["match", "tournament"], required=True, help="Specify which test to run.")
 
     # Shared parameters
     parser.add_argument("--turns", type=int, default=100, help="Number of turns for matches.")
-    parser.add_argument("--evo_action_history_size", type=int, default=5, help="EvoStrategy action history size.")
+    parser.add_argument("--evo_action_history_size", type=int, default=10, help="EvoStrategy action history size.")
 
     # Tournament-specific parameters
-    parser.add_argument("--action_history_sizes", type=int, nargs="+", default=range(0, 12, 2), help="Action history sizes for EvoStrategy in the tournament.")
     parser.add_argument("--repetitions", type=int, default=3, help="Number of repetitions in the tournament.")
     parser.add_argument("--prob_end", type=float, default=0.01, help="Probability of ending a match in the tournament.")
 
     args = parser.parse_args()
 
-    if args.test == "evo_match":
-        test_evo_match(turns=args.turns, evo_action_history_size=args.evo_action_history_size)
-    elif args.test == "match":
+    if args.test == "match":
         test_match(turns=args.turns, evo_action_history_size=args.evo_action_history_size)
     elif args.test == "tournament":
         test_tournament(
-            action_history_sizes=range(*args.action_history_sizes) if isinstance(args.action_history_sizes, list) else args.action_history_sizes,
+            action_history_sizes=range(0, args.evo_action_history_size, 2),
             turns=args.turns,
             repetitions=args.repetitions,
             prob_end=args.prob_end,

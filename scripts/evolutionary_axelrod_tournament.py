@@ -58,21 +58,20 @@ def ga_axelrod_tournament(
 
     suffix = (
         f"nep-{num_evo_players}_ahs-{action_history_size}_gens-{generations}"
-        f"_ovr-{crossover_strategy}_exp-{experiment}"
+        f"_exp-{experiment}"
     )
 
     evolutionary_ipp = GAIterativePrisonersDilemma(
         players,
-        turns=200,
         num_evo_players=num_evo_players,
-        action_history_size=action_history_size,
-        selected_proportion=0.5,
-        mutation_rate=0.1,
+        turns=200,
         generations=generations,
+        action_history_size=action_history_size,
+        mutation_rate=0.1,
         prob_end=0.01,
     )
 
-    best_evo_player = evolutionary_ipp.train(axelrod=True, crossover_strategy=crossover_strategy)
+    best_evo_player = evolutionary_ipp.train(axelrod=True)
     evolutionary_ipp.print_final_results()
 
     print("\nTesting Tournament with the best EvoStrategy")
@@ -102,7 +101,6 @@ if __name__ == "__main__":
     parser.add_argument("--generations", type=int, default=100, help="Number of generations")
     parser.add_argument("--experiment", type=int, default=1, help="Experiment identifier")
     parser.add_argument("--save_fig", type=bool, default=True, help="Save figures as files")
-    parser.add_argument("--crossover_strategy", type=str, default="adaptive_weighted", help="Crossover strategy")
     args = parser.parse_args()
 
     ga_axelrod_tournament(
@@ -111,5 +109,4 @@ if __name__ == "__main__":
         generations=args.generations,
         experiment=args.experiment,
         save_fig=args.save_fig,
-        crossover_strategy=args.crossover_strategy,
     )
