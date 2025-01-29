@@ -19,22 +19,28 @@ class RandomNumberGenerator:
             return 'C'  
         return 'C' if self.rng.random() < p else 'D'
     
-    def random(self):
-        return self.rng.random()
-    
-    def randint(self, low: int, high: int):
-        return self.rng.integers(low, high)
-    
-    def uniform(self, low: float, high: float):
-        return self.rng.uniform(low, high)
-    
-    def rand(self, size: int):
-        return self.rng.normal(0, 1, size=size)
+    def random(self, size: int = None):
+        """Generate uniform random number(s) in [0,1)."""
+        return self.rng.random(size)
+
+    def randint(self, low: int, high: int, size: int = None):
+        """Generate random integer(s) in range [low, high)."""
+        return self.rng.integers(low, high, size)
+
+    def uniform(self, low: float, high: float, size: int = None):
+        """Generate uniform random number(s) in range [low, high)."""
+        return self.rng.uniform(low, high, size)
+
+    def normal(self, size: int = None):
+        """Generate normal-distributed random number(s) with mean 0 and std 1."""
+        return self.rng.normal(0, 1, size)
 
     def shuffle(self, x: np.ndarray):
+        """Shuffle an array in-place."""
         self.rng.shuffle(x)
-    
-    def choice(self, x, size: int, replace=True, p=None):
+
+    def choice(self, x, size: int = None, replace=True, p=None):
+        """Randomly choose element(s) from a given array."""
         return self.rng.choice(x, size=size, replace=replace, p=p)
 
 

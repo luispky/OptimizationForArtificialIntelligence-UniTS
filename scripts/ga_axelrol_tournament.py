@@ -58,7 +58,7 @@ def ga_axelrod_tournament(
 
     suffix = (
         f"nep-{num_evo_players}_ahs-{action_history_size}_gens-{generations}"
-        f"_ovr-{crossover_strategy}_exp-{experiment}"
+        f"_xover-{crossover_strategy}_exp-{experiment}"
     )
 
     evolutionary_ipp = GAIterativePrisonersDilemma(

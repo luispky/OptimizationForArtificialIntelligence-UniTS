@@ -458,7 +458,7 @@ class GAIterativePrisonersDilemma:
         )
         print("-" * 90)
 
-        print_interval = max(1, self.generations // 10)
+        print_interval = max(1, self.generations // 10 - 1)
         for generation in range(self.generations):
             self._play_tournament(axelrod)
             self._evolve_population(crossover_strategy)
@@ -488,6 +488,9 @@ class GAIterativePrisonersDilemma:
                     f'{top_player["Player"]:<25}'
                     f'{f"{top_player['Score']:.2f}":<15}'
                 )
+            if top_evo["Rank"] == 1 and generation > 0:
+                print(f"\nEarly stopping: Best EvoStrategy found in generation {generation + 1}.\n")
+                break
 
         print("-" * 90)
         print("\nEvolutionary training completed.\n")

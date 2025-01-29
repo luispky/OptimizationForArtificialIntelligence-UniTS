@@ -16,10 +16,10 @@ from src.strategies import (
     FirstByTullock,
     FirstByAnonymous,
 )
-from src.game import Tournament, GAIterativePrisonersDilemma
+from src.game import Tournament, EvolutionaryIterativePrisonersDilemma
 from src.utils import plot_full_history_evo_player, plot_best_players
 
-def ga_axelrod_tournament(
+def evolutionary_axelrod_tournament(
     num_evo_players: int = 5,
     action_history_size: int = 10,
     generations: int = 100,
@@ -61,7 +61,7 @@ def ga_axelrod_tournament(
         f"_exp-{experiment}"
     )
 
-    evolutionary_ipp = GAIterativePrisonersDilemma(
+    evolutionary_ipp = EvolutionaryIterativePrisonersDilemma(
         players,
         num_evo_players=num_evo_players,
         turns=200,
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_fig", type=bool, default=True, help="Save figures as files")
     args = parser.parse_args()
 
-    ga_axelrod_tournament(
+    evolutionary_axelrod_tournament(
         num_evo_players=args.num_evo_players,
         action_history_size=args.action_history_size,
         generations=args.generations,

@@ -5,6 +5,7 @@ from typing import Optional, Tuple, List
 from .strategies import Player
 import pickle
 import os
+from collections import deque
 
 
 class EvoStrategy(Player):
@@ -16,22 +17,41 @@ class EvoStrategy(Player):
         Initializes an EvoStrategy instance with automatic naming and tracking.
 
         :param name: Optional name of the instance. Automatically generated if None.
-        :param action_history_size: Number of actions in the history.
+        :param action_history_size: Number of actions in the history. If zero, memory is not used.
         """
         name = name or self._generate_name()
         super().__init__(name)
         self.parents: Tuple[str, str] = ('', '')  # Track parent names
         self.stochastic = True
-        self.state_size = action_history_size + 6
-        self.weights = self._rng.rand(self.state_size)
+
+        # Determine state_size based on action_history_size
+        if action_history_size > 0:
+            self.state_size = 8  # 2 for memory counts ('C' and 'D') + 6 existing state variables
+        else:
+            self.state_size = 6  # Only the existing state variables
+
+        self.weights = self._rng.normal(self.state_size)
         self._state_scaler = MinMaxScaler()
         self._state = np.zeros(self.state_size, dtype=np.float64)
-        self._memory = None
-        if action_history_size > 0:
-            num_true = action_history_size // 2
-            self._memory = np.array([True] * num_true + [False] * (action_history_size - num_true))
-            self._rng.shuffle(self._memory)
+
+        # Initialize memory only if action_history_size is non-zero
+        self.action_history_size = action_history_size
+        if self.action_history_size > 0:
+            self._memory = deque(maxlen=self.action_history_size)
+            for _ in range(self.action_history_size):
+                move = self._rng.choice(['C', 'D'])
+                self._memory.append(move)
+
+            # Initialize counts
+            self._count_C = sum(1 for move in self._memory if move == 'C')
+            self._count_D = self.action_history_size - self._count_C
+        else:
+            self._memory = None  # No memory used
+            self._count_C = 0
+            self._count_D = 0
+
         self._full_history = []
+
 
     @classmethod
     def _generate_name(cls) -> str:
@@ -40,13 +60,16 @@ class EvoStrategy(Player):
         cls.instance_counter += 1
         return name
 
+
     @classmethod
     def _record_lineage(cls, offspring_name: str, parent1_name: str, parent2_name: str) -> None:
         """Records the lineage of an offspring."""
         cls.lineage.append((offspring_name, parent1_name, parent2_name))
 
+
     def get_state(self, opponent: Player) -> np.ndarray:
         """Generates the current state vector for this strategy."""
+        # Gather existing state variables
         state_integers = np.array([
             self.cooperations,
             self.defections,
@@ -55,65 +78,114 @@ class EvoStrategy(Player):
             opponent.defections,
             opponent.score
         ])
-        normalized_state = self._state_scaler.fit_transform(state_integers.reshape(-1, 1)).flatten()
-        if self._memory is not None:
-            full_state = np.concatenate((self._memory, normalized_state))
-            normalized_state = self._state_scaler.transform(full_state.reshape(-1, 1)).flatten()
-        self._state = normalized_state
-        
+
+        if self.action_history_size > 0:
+            # Incorporate counts of 'C' and 'D' into the state
+            memory_counts = np.array([self._count_C, self._count_D])
+            # Combine all state components
+            full_state = np.concatenate((memory_counts, state_integers))
+        else:
+            # Only existing state variables
+            full_state = state_integers
+
+        # Normalize the entire state once
+        normalized_full_state = self._state_scaler.fit_transform(full_state.reshape(-1, 1)).flatten()
+        self._state = normalized_full_state
+
         return self._state
 
-    def update(self, move: str, score: int) -> None:
-        super().update(move, score)
-        if self._memory is not None:
-            self._memory = np.roll(self._memory, -1)
-            self._memory[-1] = (False if move == 'D' else True)
 
-    def strategy(self, opponent: Player) -> str:
+    def update(self, move: str, score: int) -> None:
+        """Updates the strategy's state based on the latest move and score."""
+        super().update(move, score)
+        if self.action_history_size > 0 and self._memory is not None:
+            # Update counts based on the new move
+            oldest_move = self._memory.popleft()
+            if oldest_move == 'C':
+                self._count_C -= 1
+            else:
+                self._count_D -= 1
+
+            self._memory.append(move)
+            if move == 'C':
+                self._count_C += 1
+            else:
+                self._count_D += 1
+
+
+    def strategy(self, opponent: Player, log_history: bool=False) -> str:
+        """Determines the next move ('C' or 'D') based on the current state."""
         self.get_state(opponent)
-        action = 'C' if np.dot(self.weights, self._state) > 0 else 'D'
-        self._full_history.append(action)
+        action = 'C' if np.dot(self.weights, self._state) >= 0 else 'D'
+        if log_history:
+            self._full_history.append(action)
         return action
 
+
     def reset_full_history(self) -> None:
+        """Resets the full history of actions."""
         self._full_history = []
 
+
     def get_full_history(self) -> List[str]:
+        """Retrieves the full history of actions."""
         return self._full_history
+
 
     def mutate(self, mutation_rate: float) -> None:
         """Applies mutation to the weights."""
-        self.weights += self._rng.rand(self.state_size) * mutation_rate
+        self.weights += self._rng.normal(0, mutation_rate, self.state_size)
 
-    def crossover(self, other: 'EvoStrategy', strategy: str = "adaptive_weighted") -> 'EvoStrategy':
+
+    def crossover(self, other: EvoStrategy, strategy: str = "adaptive_weighted") -> Tuple[EvoStrategy, EvoStrategy]:
         """
-        Produces a new EvoStrategy instance as the offspring of this instance and another.
+        Produces two new EvoStrategy instances as offspring of this instance and another.
 
         :param other: Another EvoStrategy instance.
         :param strategy: Crossover strategy ("adaptive_weighted", "BLX-α", "random_subset").
-        :return: New EvoStrategy instance (offspring).
+        :return: Tuple of two new EvoStrategy instances (offspring1, offspring2).
         """
-        new_name = self._generate_name()
-        best_parent = self if self.score > other.score else other
-        action_history_size = best_parent.state_size - 6
-        offspring = EvoStrategy(name=new_name, action_history_size=action_history_size)
 
+        # Determine the action_history_size based on the better parent
+        best_parent = self if self.score > other.score else other
+        action_history_size = best_parent.action_history_size
+
+        # Correctly generate unique names using the class method
+        offspring1_name = type(self)._generate_name()
+        offspring2_name = type(self)._generate_name()
+
+        offspring1 = EvoStrategy(name=offspring1_name, action_history_size=action_history_size)
+        offspring2 = EvoStrategy(name=offspring2_name, action_history_size=action_history_size)
+
+        # Crossover strategies
         if strategy == "adaptive_weighted":
-            alpha = self.score / (self.score + other.score) if self.score + other.score > 0 else 0.5
-            offspring.weights = alpha * self.weights + (1 - alpha) * other.weights
+            total_score = self.score + other.score
+            alpha = self.score / total_score if total_score > 0 else 0.5
+            offspring1.weights = alpha * self.weights + (1 - alpha) * other.weights
+            offspring2.weights = (1 - alpha) * self.weights + alpha * other.weights
         elif strategy == "BLX-α":
-            α = 0.5  # Adjust this based on experimentation
-            offspring.weights = self.weights + np.random.uniform(-α, α) * (other.weights - self.weights)
+            alpha = 0.5  # Adjustable parameter
+            min_weights = np.minimum(self.weights, other.weights)
+            max_weights = np.maximum(self.weights, other.weights)
+            range_weights = max_weights - min_weights
+            offspring1.weights = self._rng.uniform(min_weights - alpha * range_weights,
+                                                  max_weights + alpha * range_weights)
+            offspring2.weights = self._rng.uniform(min_weights - alpha * range_weights,
+                                                  max_weights + alpha * range_weights)
         elif strategy == "random_subset":
-            mask = np.random.rand(self.state_size) > 0.5
-            offspring.weights = np.where(mask, self.weights, other.weights)
+            mask = self._rng.rand(self.state_size) > 0.5
+            offspring1.weights = np.where(mask, self.weights, other.weights)
+            offspring2.weights = np.where(mask, other.weights, self.weights)
         else:
             raise ValueError("Unsupported crossover strategy.")
 
-        offspring.parents = (self.name, other.name)
-        self._record_lineage(new_name, self.name, other.name)
-        return offspring
+        # Introduce slight mutations to maintain genetic diversity
+        offspring1.weights += self._rng.normal(0, 0.01, self.state_size)
+        offspring2.weights += self._rng.normal(0, 0.01, self.state_size)
 
+        return offspring1, offspring2
+    
+    
     def save_strategy(self) -> None:
         """Saves an EvoStrategy instance using pickle."""
         if not os.path.exists('strategies'):
@@ -121,6 +193,7 @@ class EvoStrategy(Player):
         filepath = f'strategies/{self.name}.pkl'
         with open(filepath, 'wb') as file:
             pickle.dump(self, file)
+
 
     @classmethod
     def load_strategy(cls, filename: str) -> 'EvoStrategy':
