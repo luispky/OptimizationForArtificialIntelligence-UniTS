@@ -1,6 +1,5 @@
 import numpy as np
 import random
-import pandas as pd
 import matplotlib.pyplot as plt
 import os
 
@@ -31,9 +30,9 @@ class RandomNumberGenerator:
         """Generate uniform random number(s) in range [low, high)."""
         return self.rng.uniform(low, high, size)
 
-    def normal(self, size: int = None):
+    def normal(self, mean: float, std: float, size: int):
         """Generate normal-distributed random number(s) with mean 0 and std 1."""
-        return self.rng.normal(0, 1, size)
+        return self.rng.normal(mean, std, size)
 
     def shuffle(self, x: np.ndarray):
         """Shuffle an array in-place."""
@@ -181,25 +180,3 @@ def plot_best_players(generation_results, save_fig=False, filename=None):
     
     # Show the plot
     plt.show() if not save_fig else plt.close()
-    
-
-def ranked_scores_from_average_scores(average_scores: dict[str, float]) -> pd.DataFrame:
-    """
-    Converts a dictionary of average scores to a DataFrame with ranks.
-    
-    :param average_scores: Dictionary with player names as keys and average scores as values.
-    :return: DataFrame with ranks based on sorted scores.
-    """
-    
-    ranked_results = pd.DataFrame(
-        list(average_scores.items()), columns=["Player", "Score"]
-    )
-    ranked_results = ranked_results.sort_values(
-        by="Score", ascending=False
-    ).reset_index(drop=True)
-    
-    # Add a rank column based on sorted scores.
-    ranked_results["Rank"] = ranked_results.index + 1
-    ranked_results = ranked_results[["Rank", "Player", "Score"]]
-    
-    return ranked_results

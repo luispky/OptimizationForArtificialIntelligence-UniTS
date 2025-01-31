@@ -23,7 +23,7 @@ def match_against_evo(player: Player, turns: int, evo_action_history_size: int) 
         evo_action_history_size (int): Action history size for EvoStrategy.
     """
     print(f"\n{player.name} vs EvoStrategy")
-    players = [player, EvoStrategy(name="Evo", action_history_size=evo_action_history_size)]
+    players = [player, EvoStrategy(name="Evo", action_history_size=evo_action_history_size, log_history=True)]
     match = Match(players, turns=turns)
     moves = match.play()
     print(f"Moves:\n{moves}")
@@ -42,7 +42,7 @@ def test_match(turns: int, evo_action_history_size: int) -> None:
     """
     print("\nTesting Match class with one EvoStrategy player")
     # Showcase that the action history size can be different for each EvoStrategy player
-    evo1 = EvoStrategy(name="Evo1", action_history_size=evo_action_history_size//2)
+    evo1 = EvoStrategy(name="Evo1", action_history_size=evo_action_history_size//2, log_history=True)
     test_players = [evo1, Alternator(), TitForTat(), Random(), FirstByTidemanAndChieruzzi()]
 
     for player in test_players:

@@ -3,11 +3,7 @@ figures/
 results/
 ideas/
 
-# Pycharm
 __pycache__/
-
-# venv
-.env/
-
-# VSCode
+.idea/
 .vscode/
+.env

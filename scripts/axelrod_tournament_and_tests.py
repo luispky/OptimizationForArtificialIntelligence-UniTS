@@ -18,13 +18,9 @@ from src.strategies import (TitForTat,
                             FirstByAnonymous,
 )
 from src.game import Match, Tournament
-from src.utils import set_seeds
 import numpy as np
 import axelrod as axl
 import argparse
-
-set_seeds(42)
-
 
 def test_match():
     """Test the Match class"""
@@ -80,6 +76,7 @@ def test_tournament():
 
     repetitions = 5 # Makes sense only with stochastic strategies and fixed seed
     turns = 200
+    seed = 42
 
     players = [
         Cooperator(),
@@ -88,7 +85,7 @@ def test_tournament():
         Alternator(),
         Random(), 
     ]
-    tournament = Tournament(players, turns=turns, repetitions=repetitions)
+    tournament = Tournament(players, turns=turns, repetitions=repetitions, seed=seed)
     tournament.play()
     
     tournament.print_ranked_results()
@@ -102,6 +99,7 @@ def test_tournament_axl_library():
     
     repetitions = 5
     turns = 200
+    seed = 42
     
     players = [
         axl.Cooperator(),
@@ -110,7 +108,7 @@ def test_tournament_axl_library():
         axl.Alternator(), 
         axl.Random(),
     ]
-    tournament = axl.Tournament(players, turns=turns, repetitions=repetitions)
+    tournament = axl.Tournament(players, turns=turns, repetitions=repetitions, seed=seed)
     results = tournament.play(progress_bar=False)
     
     # Calculate the mean results
@@ -135,6 +133,7 @@ def axelrod_tournament():
     turns = 200
     repetitions = 5
     prob_end = 0.01
+    seed = 42
     
     players = [
         TitForTat(),
@@ -154,7 +153,7 @@ def axelrod_tournament():
         Random(),
     ]
     
-    tournament = Tournament(players, turns=turns, repetitions=repetitions, prob_end=prob_end)
+    tournament = Tournament(players, turns=turns, repetitions=repetitions, prob_end=prob_end, seed=seed)
     tournament.play(axelrod=True)
     
     tournament.print_ranked_results()
@@ -168,6 +167,7 @@ def axelrod_tournament_axl_library():
     turns = 200
     repetitions = 5
     prob_end = 0.01
+    seed = 42
     
     players = [
         axl.TitForTat(),
@@ -188,7 +188,7 @@ def axelrod_tournament_axl_library():
     ]
     
     # Initialize the axelrod Tournament with the specified parameters
-    tournament = axl.Tournament(players, turns=turns, repetitions=repetitions, prob_end=prob_end, seed=42)
+    tournament = axl.Tournament(players, turns=turns, repetitions=repetitions, prob_end=prob_end, seed=seed)
     
     # Play the tournament and capture the results
     results = tournament.play(progress_bar=False)

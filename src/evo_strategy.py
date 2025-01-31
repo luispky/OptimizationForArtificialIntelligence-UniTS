@@ -12,7 +12,7 @@ class EvoStrategy(Player):
     instance_counter = 0  # Class-level counter for naming instances
     lineage: List[Tuple[str, str, str]] = []  # Lineage tracking for evolutionary strategies
 
-    def __init__(self, name: Optional[str] = None, action_history_size: int = 10) -> None:
+    def __init__(self, name: Optional[str] = None, action_history_size: int = 10, log_history: bool=False) -> None:
         """
         Initializes an EvoStrategy instance with automatic naming and tracking.
 
@@ -30,7 +30,7 @@ class EvoStrategy(Player):
         else:
             self.state_size = 6  # Only the existing state variables
 
-        self.weights = self._rng.normal(self.state_size)
+        self.weights = self._rng.normal(0, 1, self.state_size)
         self._state_scaler = MinMaxScaler()
         self._state = np.zeros(self.state_size, dtype=np.float64)
 
@@ -50,8 +50,8 @@ class EvoStrategy(Player):
             self._count_C = 0
             self._count_D = 0
 
+        self.log_history = log_history
         self._full_history = []
-
 
     @classmethod
     def _generate_name(cls) -> str:
@@ -113,11 +113,11 @@ class EvoStrategy(Player):
                 self._count_D += 1
 
 
-    def strategy(self, opponent: Player, log_history: bool=False) -> str:
+    def strategy(self, opponent: Player) -> str:
         """Determines the next move ('C' or 'D') based on the current state."""
         self.get_state(opponent)
         action = 'C' if np.dot(self.weights, self._state) >= 0 else 'D'
-        if log_history:
+        if self.log_history:
             self._full_history.append(action)
         return action
 
@@ -163,7 +163,7 @@ class EvoStrategy(Player):
             alpha = self.score / total_score if total_score > 0 else 0.5
             offspring1.weights = alpha * self.weights + (1 - alpha) * other.weights
             offspring2.weights = (1 - alpha) * self.weights + alpha * other.weights
-        elif strategy == "BLX-α":
+        elif strategy == "BLX-alpha":
             alpha = 0.5  # Adjustable parameter
             min_weights = np.minimum(self.weights, other.weights)
             max_weights = np.maximum(self.weights, other.weights)
@@ -178,10 +178,6 @@ class EvoStrategy(Player):
             offspring2.weights = np.where(mask, other.weights, self.weights)
         else:
             raise ValueError("Unsupported crossover strategy.")
-
-        # Introduce slight mutations to maintain genetic diversity
-        offspring1.weights += self._rng.normal(0, 0.01, self.state_size)
-        offspring2.weights += self._rng.normal(0, 0.01, self.state_size)
 
         return offspring1, offspring2
     

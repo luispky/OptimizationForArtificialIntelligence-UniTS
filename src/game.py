@@ -1,12 +1,13 @@
 import copy
 import numpy as np
 import pandas as pd
+import pandas as pd
 import os
 from typing import List, Tuple, Dict, Union
 from math import ceil, log
 from .strategies import Player
 from .evo_strategy import EvoStrategy
-from .utils import RandomNumberGenerator, ranked_scores_from_average_scores
+from .utils import RandomNumberGenerator
 
 PAYOFF_MATRIX = {
     ('C', 'C'): (3, 3),
@@ -178,6 +179,7 @@ class Match:
             return self.players[1].name
         return 'Tie'
 
+
 def play_match(player1: Player, player2: Player, turns: int, noise: float, prob_end: float, seed: Union[int, None] = None) -> Tuple[int, int]:
     """
     Plays a single match between two players and returns their final scores.
@@ -193,6 +195,28 @@ def play_match(player1: Player, player2: Player, turns: int, noise: float, prob_
     match = Match([player1, player2], turns, noise, prob_end, seed)
     match.play()
     return match.final_scores
+
+
+def ranked_scores_from_average_scores(average_scores: dict[str, float]) -> pd.DataFrame:
+    """
+    Converts a dictionary of average scores to a DataFrame with ranks.
+    
+    :param average_scores: Dictionary with player names as keys and average scores as values.
+    :return: DataFrame with ranks based on sorted scores.
+    """
+    
+    ranked_results = pd.DataFrame(
+        list(average_scores.items()), columns=["Player", "Score"]
+    )
+    ranked_results = ranked_results.sort_values(
+        by="Score", ascending=False
+    ).reset_index(drop=True)
+    
+    # Add a rank column based on sorted scores.
+    ranked_results["Rank"] = ranked_results.index + 1
+    ranked_results = ranked_results[["Rank", "Player", "Score"]]
+    
+    return ranked_results
 
 
 def round_robin_tournament(players: List[Player], turns: int, noise: float = 0.0, prob_end: float = 0.0, seed: Union[int, None] = None, axelrod: bool = False) -> Dict[str, List[int]]:
@@ -313,58 +337,46 @@ class Tournament:
 
 class GAIterativePrisonersDilemma:
     """
-    Simulates an evolutionary Iterated Prisoner's Dilemma (IPD) tournament
-    that combines fixed (non-evolutionary) players and evolutionary players.
-
-    The evolutionary players adapt over multiple generations. Each generation:
-      - Runs a round-robin tournament (possibly Axelrod-style, i.e.,
-        players may compete against themselves).
-      - Ranks players by their average scores.
-      - Selects the top proportion of evolutionary players and evolves them
-        (via crossover and mutation).
-      - Replaces the previous generation's evolutionary players with the
-        newly formed offspring.
-
-    The process repeats for a specified number of generations, and a record of
-    each generation's top performers is maintained.
+    Simulates an evolutionary Iterated Prisoner's Dilemma (IPD) tournament with both fixed
+    (non-evolutionary) and evolutionary players. Over multiple generations, evolutionary
+    players adapt by competing in round-robin tournaments, ranking by average score, and
+    undergoing selection, crossover, and mutation to form the next generation.
     """
 
     def __init__(
-            self,
-            fixed_players: List[Player],
-            num_evo_players: int = 10,
-            noise: float = 0.0,
-            prob_end: float = 0.0,
-            turns: int = 100,
-            generations: int = 10,
-            elitism_proportion: float = 0.1,
-            action_history_size: int = 10,
-            mutation_rate: float = 0.1,
-            mutation_probability: float = 0.1,
-            seed: Union[int, None] = None
+        self,
+        fixed_players: List[Player],
+        num_evo_players: int = 10,
+        noise: float = 0.0,
+        prob_end: float = 0.0,
+        turns: int = 100,
+        generations: int = 10,
+        elitism_proportion: float = 0.1,
+        action_history_size: int = 10,
+        mutation_rate: float = 0.1,
+        crossover_probability: float = 0.95,
+        mutation_probability: float = 0.1,
+        seed: Union[int, None] = 42
     ):
         """
-        Initialize the evolutionary iterative tournament.
+        Initializes the evolutionary IPD tournament.
 
-        :param fixed_players: List of fixed strategies (non-evolutionary).
+        :param fixed_players: List of non-evolutionary (fixed) strategies.
         :param num_evo_players: Number of evolutionary players to include.
-        :param turns: Maximum number of turns per match.
-        :param generations: Number of generations of the evolutionary process.
-        :param elitism_proportion: Proportion of top evolutionary players that
-                                    will be selected to produce the next generation.
-        :param action_history_size: Size of the action-history window for evolutionary players.
-        :param mutation_rate: Probability that a mutation occurs in an offspring strategy.
         :param noise: Probability of introducing noise in players' actions.
         :param prob_end: Probability of ending a match after each turn.
-        :param seed: Seed for reproducibility (if None, a random seed is used).
-
-        :raises ValueError: If the number of evolutionary players or the selected proportion
-                           results in fewer than two survivors each generation.
+        :param turns: Maximum number of turns per match.
+        :param generations: Number of generations for the evolutionary process.
+        :param elitism_proportion: Fraction of top evolutionary players retained each generation.
+        :param action_history_size: Max history size for evolutionary strategies' memory.
+        :param mutation_rate: Standard deviation for Gaussian mutation noise.
+        :param crossover_probability: Probability of performing crossover between parents.
+        :param mutation_probability: Probability of mutating an offspring strategy.
+        :param seed: Random seed for reproducibility (if None, random seed is used).
+        :raises ValueError: If num_evo_players < 2 or elitism would produce fewer than two survivors.
         """
         if num_evo_players < 2:
-            raise ValueError(
-                "The number of evolutionary players must be at least 2."
-            )
+            raise ValueError("The number of evolutionary players must be at least 2.")
 
         self.fixed_players = fixed_players
         self.num_evo_players = num_evo_players
@@ -377,142 +389,171 @@ class GAIterativePrisonersDilemma:
         self.seed = seed
         self.ranked_results: pd.DataFrame = pd.DataFrame()
         self.generations_results: pd.DataFrame = pd.DataFrame()
-        self.mutation_rate = mutation_rate
 
-        # Initialize evolutionary players, each with its own strategy parameters.
-        self.evo_players = [
-            EvoStrategy(action_history_size=action_history_size)
+        # Crossover and mutation parameters
+        self.xover_prob = crossover_probability
+        self.mutation_probability = mutation_probability
+        self.mutation_rate = mutation_rate
+        
+        # Random number generator for reproducibility
+        self.rng = np.random.default_rng(self.seed)
+
+        # Initialize evolutionary players with random action_history_size
+        self.evo_players: List[EvoStrategy] = [
+            EvoStrategy(action_history_size=self.rng.integers(max(1, action_history_size // 2), action_history_size, dtype=int))
             for _ in range(num_evo_players)
         ]
         self._best_evo_player: Union[EvoStrategy, None] = None
+        
 
     def _play_tournament(self, players: List[Player], axelrod: bool = False) -> pd.DataFrame:
         """
-        Conducts a single round-robin tournament among all current players
-        (fixed and evolutionary).
+        Conducts a single round-robin tournament among the specified players (fixed + evolutionary).
 
-        :param axelrod: If True, each player also plays against itself
-                        (Axelrod-style tournament).
-        
+        :param players: List of all players participating in the tournament.
+        :param axelrod: If True, each player also competes against itself (Axelrod-style).
+        :return: DataFrame with each player's average score, sorted by rank.
         """
-
         scores = round_robin_tournament(players, self.turns, self.noise, self.prob_end, self.seed, axelrod)
-
-        # Compute average scores per player, dividing total by the number of opponents faced.
-        total_opponents = len(players) - 1 * (not axelrod)
+        total_opponents = len(players) - 1 * (not axelrod)  # Adjust if self-play is disabled
         average_scores = {
             player.name: sum(scores[player.name]) / total_opponents for player in players
         }
+        return ranked_scores_from_average_scores(average_scores)
 
-        df_ranked = ranked_scores_from_average_scores(average_scores)
-        
-        return df_ranked
 
-    def _evolve_population(self, crossover_strategy: str = "adaptive_weighted") -> None:
+    def _extract_sorted_evo_scores(self, df_ranked: pd.DataFrame) -> pd.DataFrame:
         """
-        Evolves the current population of evolutionary players by selecting top performers
-        and generating offspring via crossover and mutation.
+        Extracts and sorts evolutionary players' scores from a ranked results DataFrame.
+
+        :param df_ranked: DataFrame containing ranked results of a tournament (all players).
+        :return: DataFrame sorted by rank but filtered to only include evolutionary players.
         """
-        # Filter out rows in `self.ranked_results` that belong to evolutionary players only.
-        evo_scores = self.ranked_results[
-            self.ranked_results["Player"].isin([p.name for p in self.evo_players])
-        ]
+        evo_player_names = [p.name for p in self.evo_players]
+        evo_scores = df_ranked[df_ranked["Player"].isin(evo_player_names)]
+        return evo_scores.sort_values(by="Rank", ascending=True)
+    
+    
+    def _evolve_population(
+        self,
+        sorted_evo_scores: pd.DataFrame,
+        crossover_strategy: str = "adaptive_weighted"
+    ) -> None:
+        """
+        Selects top evolutionary players (elitism), then generates offspring to replenish
+        the evolutionary player pool.
 
-        # Reorder self.evo_players according to the rank in evo_scores (best to worst).
-        self.evo_players = [
-            next(p for p in self.evo_players if p.name == player_name)
-            for player_name in evo_scores["Player"]
-        ]
+        :param sorted_evo_scores: Ranked scores specific to evolutionary players.
+        :param crossover_strategy: Crossover approach (e.g., 'adaptive_weighted', 'BLX-α').
+        """
+        # Reorder current evolutionary players by rank (best -> worst)
+        sorted_names = sorted_evo_scores["Player"].tolist()
+        name_to_player = {p.name: p for p in self.evo_players}
+        self.evo_players = [name_to_player[n] for n in sorted_names]
 
-        # Select the top-performing evolutionary players.
-        elite_evo_players = self.evo_players[:self.num_elite_players]
+        # Elitism: keep top performers
+        elites = self.evo_players[:self.num_elite_players]
 
-        # Generate offspring from the selected players.
-        offspring = self._generate_offspring(crossover_strategy)
+        # Generate offspring from the entire (sorted) evo player set
+        offspring = self._generate_offspring(df_ranked=sorted_evo_scores, strategy=crossover_strategy)
 
-        # Update evolutionary players: top players + new offspring.
-        self.evo_players = elite_evo_players + offspring
-
-
-    def _parents_selection(self, direct_inheritance: bool = False) -> Tuple[EvoStrategy, EvoStrategy]:
-        if direct_inheritance:
-            parent1, parent2 = np.random.choice(self.evo_players, size=2, replace=False)
-            return parent1, parent2
-        
-        df_ranked = self._play_tournament(self.evo_players)
-        
-        # Ensure the probabilities align with the correct player objects
-        player_dict = {p.name: p for p in self.evo_players}  # Map names to EvoStrategy objects
-        probabilities = df_ranked["Score"].values / df_ranked["Score"].sum()
-
-        # Extract players in the correct order from df_ranked
-        ordered_players = [player_dict[name] for name in df_ranked["Player"].values]
-
-        # Select two distinct parents based on probabilities
-        parents = np.random.choice(ordered_players, size=2, replace=False, p=probabilities)
-
-        return tuple(parents)
+        # Combine elites and newly produced offspring
+        self.evo_players = elites + offspring
 
 
     def _generate_offspring(
-            self,
-            direct_inheritance: bool = False,
-            crossover_strategy: str = "adaptive_weighted"
+        self,
+        df_ranked: pd.DataFrame,
+        crossover_strategy: str = "adaptive_weighted"
     ) -> List[EvoStrategy]:
         """
-        Creates offspring to fill the evolutionary player pool back to `num_evo_players`.
+        Fills the evolutionary player pool up to num_evo_players by creating offspring.
+
+        :param df_ranked: Overall ranked results used to get selection probabilities.
+        :param crossover_strategy: How parents' genetic information is combined.
+        :return: A list of newly created EvoStrategy offspring.
         """
         offspring = []
-        while len(offspring) < self.num_evo_players - self.num_elite_players:
-            parent1, parent2 = self._parents_selection(direct_inheritance)
-            child = parent1.crossover(parent2, crossover_strategy)
-            child.mutate(self.mutation_rate)
-            offspring.append(child)
+        required_offspring = self.num_evo_players - self.num_elite_players
+
+        # Map names to evolutionary player instances and prepare selection probabilities
+        player_dict = {p.name: p for p in self.evo_players}
+        probabilities = df_ranked["Score"].values / df_ranked["Score"].sum()
+        ordered_players = [player_dict[name] for name in df_ranked["Player"].values]
+
+        while len(offspring) < required_offspring:
+            # Select two parents based on their scores
+            parent1, parent2 = self.rng.choice(
+                ordered_players, size=2, replace=False, p=probabilities
+            )
+
+            # Crossover with probability xover_prob, otherwise copy parents
+            if self.rng.random() < self.xover_prob:
+                offspring_pair = parent1.crossover(parent2, strategy=crossover_strategy)
+            else:
+                offspring_pair = (parent1, parent2)
+
+            for child in offspring_pair:
+                # Mutate with probability mutation_probability
+                if self.rng.random() < self.mutation_probability:
+                    child.mutate(self.mutation_rate)
+                offspring.append(child)
+                if len(offspring) >= required_offspring:
+                    break
 
         return offspring
 
-    def train(self, axelrod: bool = False, crossover_strategy: str = "adaptive_weighted") -> EvoStrategy:
-        """
-        Runs the full evolutionary training for the specified number of generations.
 
-        :param axelrod: If True, each player also competes against itself in each generation.
-        :param crossover_strategy: Mechanism for combining two parent strategies.
-        :return: The best evolutionary player after the final generation.
+    def train(
+        self,
+        axelrod: bool = False,
+        crossover_strategy: str = "adaptive_weighted"
+    ) -> EvoStrategy:
+        """
+        Executes the evolutionary training process for a specified number of generations.
+        Each generation:
+          - Runs a round-robin tournament (optionally Axelrod-style).
+          - Ranks all players by average score.
+          - Records top-performing evolutionary and overall players.
+          - Evolves the evolutionary players (selection, crossover, mutation).
+
+        :param axelrod: If True, each player also plays against itself.
+        :param crossover_strategy: Strategy for combining parent weights (e.g., 'adaptive_weighted').
+        :return: Reference to the best evolutionary player after final generation.
         """
         print(f"\nTraining {self.num_evo_players} evolutionary strategies...\n")
-
-        # Prepare a list to accumulate generation-level results.
         results_data = []
 
-        # Print a table header for intermediate results.
+        # Display table header for intermediate results
         print("-" * 90)
         print(
             f'{"Generation":<15}'
-            f'{"EvoStrategy":<12}'
-            f'{"(Rank/Players, Score)":<25}'
-            f'{"Best Player":<25}'
+            f'{"Best Evo Player":<20}'
+            f'{"Evo Score":<15}'
+            f'{"Best Player":<20}'
             f'{"Best Score":<15}'
         )
         print("-" * 90)
 
         print_interval = max(1, self.generations // 10)
-        for generation in range(self.generations):
-            
+        for generation in range(1, self.generations + 1):
+            # Play tournament among fixed + current evolutionary players
             players = self.fixed_players + self.evo_players
             self.ranked_results = self._play_tournament(players, axelrod)
 
-            # Extract the top evolutionary player in this generation.
+            # Identify top evolutionary and top overall players
             top_evo = self.ranked_results.loc[
                 self.ranked_results["Player"].isin([p.name for p in self.evo_players])
             ].iloc[0]
-
-            # Extract the top overall player in this generation.
             top_player = self.ranked_results.iloc[0]
 
-            # Print/log intermediate results at defined intervals (or the final generation).
-            if generation % print_interval == 0 or generation == self.generations - 1:
+            # Log intermediate results at intervals
+            if (generation == 1 or
+                generation % print_interval == 0 or
+                generation == self.generations
+                ):
                 results_data.append({
-                    "Generation": generation + 1,
+                    "Generation": generation,
                     "Best Evo Player": top_evo["Player"],
                     "Evo Rank": int(top_evo["Rank"]),
                     "Evo Score": float(top_evo["Score"]),
@@ -520,377 +561,373 @@ class GAIterativePrisonersDilemma:
                     "Best Score": float(top_player["Score"])
                 })
                 print(
-                    f'{f"[{generation + 1}/{self.generations}]":<15}'
-                    f'{top_evo["Player"]:<12}'
-                    f'{f"({top_evo['Rank']}/{self.num_players}, {top_evo['Score']:.2f})":<25}'
-                    f'{top_player["Player"]:<25}'
-                    f'{f"{top_player['Score']:.2f}":<15}'
+                    f"[{generation}/{self.generations}]".ljust(15) +
+                    f"{top_evo['Player']:<12}" +
+                    f"({top_evo['Rank']}/{self.num_players}, {top_evo['Score']:.2f})".ljust(25) +
+                    f"{top_player['Player']:<25}" +
+                    f"{top_player['Score']:.2f}".ljust(15)
                 )
-            
-            self._evolve_population(crossover_strategy)
+
+            # Evolve the population unless we're at the final generation
+            if generation < self.generations:
+                sorted_evo_scores = self._extract_sorted_evo_scores(self.ranked_results)
+                self._evolve_population(sorted_evo_scores, crossover_strategy)
 
         print("-" * 90)
         print("\nEvolutionary training completed.\n")
 
+        # Store the generation-by-generation results
         self.generations_results = pd.DataFrame(results_data)
+
+        # Identify the best evolutionary player overall
         best_evo_name = self.ranked_results.loc[
             self.ranked_results["Player"].isin([p.name for p in self.evo_players])
         ].iloc[0]["Player"]
         self._best_evo_player = next(p for p in self.evo_players if p.name == best_evo_name)
 
         return self._best_evo_player
+    
 
     def get_best_evo_player(self) -> EvoStrategy:
         """
-        Returns the best evolutionary player found during training.
+        Returns the best evolutionary player found at the end of training.
 
-        :return: The top EvoStrategy instance at the end of the last generation.
-        :raises ValueError: If `train()` has not been called yet (no best player identified).
+        :return: The best EvoStrategy instance.
+        :raises ValueError: If training has not been run yet (no best player).
         """
         if self._best_evo_player is None:
-            raise ValueError("The evolutionary tournament has not been played yet.")
+            raise ValueError("No best evolutionary player found (train() not yet called).")
         return self._best_evo_player
+
 
     def get_generations_results(self) -> pd.DataFrame:
         """
-        Returns a DataFrame summarizing the results of each generation.
+        Retrieves a summary of the top performers per generation.
 
-        The DataFrame columns include:
-            - 'Generation': Generation index (1-based).
-            - 'Best Evo Player': Name of top evolutionary player in that generation.
-            - 'Evo Rank': Rank of the top evolutionary player among all players.
-            - 'Evo Score': Score of the top evolutionary player.
-            - 'Best Player': Name of the top overall player in that generation.
-            - 'Best Score': Score of the top overall player.
+        Columns in the resulting DataFrame:
+            Generation, Best Evo Player, Evo Rank, Evo Score, Best Player, Best Score
 
-        :return: Pandas DataFrame of size (#logged_generations x 6).
-        :raises ValueError: If the training has not been run yet (DataFrame is empty).
+        :return: DataFrame of results (#logged_generations x 6).
+        :raises ValueError: If training has not been run yet (no results).
         """
         if self.generations_results.empty:
-            raise ValueError("The evolutionary tournament has not been played yet.")
+            raise ValueError("No results available (train() not yet called).")
         return self.generations_results
+
 
     def print_final_results(self) -> None:
         """
-        Prints the final ranked results of the last generation's tournament
-        for all players (fixed and evolutionary).
+        Prints the final ranked results of the last tournament.
 
-        :raises ValueError: If the tournament has not been played yet (ranked_results empty).
+        :raises ValueError: If no tournament has been played.
         """
         if self.ranked_results.empty:
-            raise ValueError("The evolutionary tournament has not been played yet.")
+            raise ValueError("No tournament data available (train() not yet called).")
         print(self.ranked_results.to_string(index=False))
 
 
-class EvolutionaryIterativePrisonersDilemma:
+class CoevolutionaryIterativePrisonersDilemma:
     """
-    Simulates an evolutionary Iterated Prisoner's Dilemma (IPD) tournament
-    with evolutionary players adapting solely through mutation and the
-    one-fifth rule for dynamic mutation rate adjustment.
+    Simulates an evolutionary Iterated Prisoner's Dilemma (IPD) tournament with both fixed
+    (non-evolutionary) and evolutionary players.
+
+    Over multiple generations, evolutionary players:
+      - Participate in a round-robin tournament (optionally Axelrod-style),
+      - Are ranked by their average scores,
+      - Undergo selection (with elitism), crossover, and mutation,
+      - Replace the previous evolutionary population with newly formed offspring.
+
+    A record of top performers is maintained. Additionally, an "absolute fitness" evaluation
+    may be conducted at specified intervals (e.g., every Nth generation).
     """
 
     def __init__(
         self,
         fixed_players: List[Player],
         num_evo_players: int = 10,
-        turns: int = 100,
-        generations: int = 10,
-        action_history_size: int = 2,
-        mutation_rate: float = 0.1,
+        absolute_fitness_eval_interval: int = 10,
         noise: float = 0.0,
         prob_end: float = 0.0,
-        seed: Union[int, None] = None
+        turns: int = 200,
+        generations: int = 10,
+        elitism_proportion: float = 0.1,
+        action_history_size: int = 10,
+        mutation_rate: float = 0.1,
+        mutation_probability: float = 0.8,
+        crossover_probability: float = 0.95,
+        seed: Union[int, None] = 42
     ):
         """
-        Initializes the evolutionary iterative tournament.
+        Initializes the evolutionary IPD tournament.
 
-        :param fixed_players: List of fixed strategy players.
-        :param num_evo_players: Number of evolutionary players.
-        :param turns: Number of turns per match.
-        :param generations: Number of generations.
-        :param action_history_size: Action-history size for evolutionary players.
-        :param mutation_rate: Initial mutation rate.
-        :param noise: Probability of noise in actions.
-        :param prob_end: Probability of ending a match early.
-        :param seed: Random seed.
+        :param fixed_players: List of non-evolutionary (fixed) strategies.
+        :param num_evo_players: Number of evolutionary players to include (>= 2).
+        :param absolute_fitness_eval_interval: Interval (in generations) at which to perform
+                                              "absolute fitness" evaluation.
+        :param noise: Probability of introducing noise in players' actions.
+        :param prob_end: Probability of ending a match after each turn.
+        :param turns: Maximum number of turns per match.
+        :param generations: Total number of generations in the evolutionary process.
+        :param elitism_proportion: Fraction of top evolutionary players retained each generation.
+        :param action_history_size: Memory size for the evolutionary strategies (history window).
+        :param mutation_rate: Standard deviation for Gaussian mutation noise.
+        :param mutation_probability: Probability that mutation is applied to an offspring.
+        :param crossover_probability: Probability of performing crossover between parents.
+        :param seed: Seed for random number generation (None => random seed).
+        :raises ValueError: If num_evo_players < 2, or if elitism_proportion yields < 1 elite.
         """
         if num_evo_players < 2:
             raise ValueError("The number of evolutionary players must be at least 2.")
 
         self.fixed_players = fixed_players
         self.num_evo_players = num_evo_players
-        self.num_players = len(fixed_players) + num_evo_players
+        self.num_elite_players = max(1, int(elitism_proportion * num_evo_players))
         self.turns = turns
         self.generations = generations
+        self.absolute_fitness_eval_interval = absolute_fitness_eval_interval
         self.noise = noise
         self.prob_end = prob_end
         self.seed = seed
-        self.mutation_rate = mutation_rate
-
-        # DataFrames for logging
         self.ranked_results: pd.DataFrame = pd.DataFrame()
-        self.generations_results: pd.DataFrame = pd.DataFrame()
+        self.generations_results: List[Dict] = []
 
-        # Initialize evolutionary players
-        # Each EvoStrategy must have a unique name if you rely on 'name' for tracking
-        self.evo_players = [
-            EvoStrategy(action_history_size=action_history_size)
+        # Crossover and mutation parameters
+        self.xover_prob = crossover_probability
+        self.mutation_probability = mutation_probability
+        self.mutation_rate = mutation_rate
+        
+        # Random number generator for reproducibility
+        self.rng = np.random.default_rng(self.seed)
+
+        # Initialize evolutionary players with random action_history_size
+        self.evo_players: List[EvoStrategy] = [
+            EvoStrategy(action_history_size=self.rng.integers(max(1, action_history_size // 2), action_history_size, dtype=int))
             for _ in range(num_evo_players)
         ]
         self._best_evo_player: Union[EvoStrategy, None] = None
 
-    def _play_tournament(
-        self, players: List[Player], axelrod: bool = False
-    ) -> pd.DataFrame:
+
+    def _play_tournament(self, players: List[Player], axelrod: bool = False) -> pd.DataFrame:
         """
-        Conducts a single round-robin tournament among fixed + evo players.
+        Conducts a single round-robin tournament among the specified players (fixed + evolutionary).
 
-        :param axelrod: If True, players also compete against themselves.
-        :return: A DataFrame with columns ["Player", "Score", "Rank"], 
-                 sorted by descending Score.
+        :param players: List of all players participating in the tournament.
+        :param axelrod: If True, each player also competes against itself (Axelrod-style).
+        :return: DataFrame with each player's average score, sorted by rank.
         """
-        
-        # Conduct the round-robin. This function should return
-        # something like a dict: {player: [scores_against_each_opponent]} 
-        scores_dict = round_robin_tournament(
-            players, self.turns, self.noise, self.prob_end, self.seed, axelrod
-        )
+        scores = round_robin_tournament(players, self.turns, self.noise, self.prob_end, self.seed, axelrod)
+        total_opponents = len(players) - 1 * (not axelrod)  # Adjust if self-play is disabled
+        average_scores = {
+            player.name: sum(scores[player.name]) / total_opponents for player in players
+        }
+        return ranked_scores_from_average_scores(average_scores)
 
-        # Example aggregator for average scores. This depends on how round_robin_tournament
-        # organizes the returned data. Adjust to your actual aggregator.
-        total_opponents = len(players) - 1 * (not axelrod)
-        
-        average_scores = {}
-        for p in players:
-            p_scores = scores_dict[p.name]  # or however you stored them
-            average_scores[p.name] = sum(p_scores) / total_opponents
-
-        # Convert average scores to a ranking DataFrame
-        df_ranked = ranked_scores_from_average_scores(average_scores)
-        # df_ranked has columns: ["Player", "Score", "Rank"]
-        
-        return df_ranked
-
-    def _apply_one_fifth_rule(self, success_rate: float) -> None:
+    def _evolve_population(
+        self,
+        sorted_evo_scores: pd.DataFrame,
+        crossover_strategy: str = "adaptive_weighted"
+    ) -> None:
         """
-        Adjusts the mutation rate based on the success rate using the one-fifth rule.
-        """
-        if success_rate > 0.2:
-            self.mutation_rate *= 1.05
-        elif success_rate < 0.2:
-            self.mutation_rate *= 0.95
+        Selects top evolutionary players (elitism), then uses them to produce offspring
+        via crossover and mutation, restoring the population size.
 
-    def _mutate_population(self) -> List["EvoStrategy"]:
+        :param sorted_evo_scores: Ranked scores of evolutionary players (best -> worst).
+        :param crossover_strategy: Strategy used for combining parent weights
+                                  (e.g., 'adaptive_weighted', 'BLX-α').
         """
-        Creates offspring by mutating each evolutionary player exactly once.
+        # Reorder self.evo_players according to the sorted evo_scores (best -> worst).
+        sorted_names = sorted_evo_scores["Player"].tolist()
+        name_to_player = {p.name: p for p in self.evo_players}
+        self.evo_players = [name_to_player[n] for n in sorted_names]
 
-        :return: List of mutated EvoStrategy instances, same length as self.evo_players.
+        # Select top-performing evolutionary players (elitism)
+        elite_evo_players = self.evo_players[:self.num_elite_players]
+
+        # Create the rest via offspring
+        offspring = self._generate_offspring(sorted_evo_scores, crossover_strategy)
+
+        # Replace old evolutionary population
+        self.evo_players = elite_evo_players + offspring
+
+    def _generate_offspring(
+        self,
+        df_ranked: pd.DataFrame,
+        crossover_strategy: str = "adaptive_weighted"
+    ) -> List[EvoStrategy]:
+        """
+        Produces enough offspring to fill the evolutionary population up to 'num_evo_players'.
+
+        :param df_ranked: Ranked scores for evolutionary players.
+        :param crossover_strategy: Crossover approach (e.g., 'adaptive_weighted').
+        :return: List of newly created EvoStrategy offspring.
         """
         offspring = []
-        for parent in self.evo_players:
-            child = copy.deepcopy(parent)
-            # Use the current mutation rate
-            child.mutate(self.mutation_rate)
-            offspring.append(child)
-        return offspring
-    
-    def train(self, axelrod: bool = False, one_fifth_interval: int = 10) -> "EvoStrategy":
-        """
-        Runs the evolutionary training for the specified number of generations.
+        required_offspring = self.num_evo_players - self.num_elite_players
 
-        :param axelrod: If True, players also compete against themselves.
-        :param one_fifth_interval: Interval for applying the one-fifth success rule.
-        :return: The best evolutionary player after the final generation.
+        # Map player name -> EvoStrategy instance
+        player_dict = {p.name: p for p in self.evo_players}
+        probabilities = df_ranked["Score"].values / df_ranked["Score"].sum()
+        ordered_players = [player_dict[name] for name in df_ranked["Player"].values]
+
+        while len(offspring) < required_offspring:
+            # Select two parents based on their scores
+            parent1, parent2 = self.rng.choice(
+                ordered_players, size=2, replace=False, p=probabilities
+            )
+
+            # Crossover with probability xover_prob, otherwise copy parents
+            if self.rng.random() < self.xover_prob:
+                offspring_pair = parent1.crossover(parent2, strategy=crossover_strategy)
+            else:
+                offspring_pair = (parent1, parent2)
+
+            for child in offspring_pair:
+                # Mutate with probability mutation_probability
+                if self.rng.random() < self.mutation_probability:
+                    child.mutate(self.mutation_rate)
+                offspring.append(child)
+                if len(offspring) >= required_offspring:
+                    break
+
+        return offspring
+
+
+    def _evaluate_absolute_fitness(self, axelrod: bool, generation: int) -> pd.DataFrame:
+        """
+        Performs an 'absolute fitness' evaluation of each evolutionary player against
+        all fixed players individually, logs best performers, and returns sorted scores.
+
+        :param axelrod: If True, each player also plays against itself.
+        :param generation: Current generation number (used for logging).
+        :return: DataFrame sorted by Score, containing the evolutionary players' results.
+        """
+        evo_players_scores = []
+
+        for evo_player in self.evo_players:
+            # Evaluate evo_player against all fixed players only
+            players = self.fixed_players + [evo_player]
+            df_ranked = self._play_tournament(players, axelrod=axelrod)
+            evo_player_info_tmp = df_ranked[df_ranked["Player"] == evo_player.name].iloc[0]
+            evo_players_scores.append(evo_player_info_tmp)
+
+        # Convert evolutionary players' results into a DataFrame, then sort
+        evo_scores_df = pd.DataFrame(evo_players_scores).sort_values(by="Score", ascending=False)
+        best_evo_name = evo_scores_df.iloc[0]["Player"]
+        best_evo_player = next(p for p in self.evo_players if p.name == best_evo_name)
+        
+        players = self.fixed_players + [best_evo_player]
+        df_ranked = self._play_tournament(players, axelrod=axelrod)
+        
+        top_player_info = df_ranked.iloc[0]
+        top_evo_info = df_ranked[df_ranked["Player"] == best_evo_name].iloc[0]
+
+        # Print intermediate results (best evolutionary player + best player overall)
+        print(
+            f'[{generation}/{self.generations}]'.ljust(15)
+            + f'{top_evo_info["Player"]:<12}'
+            + f'({top_evo_info["Rank"]}/{len(players)}, {top_evo_info["Score"]:.2f})'.ljust(25)
+            + f'{top_player_info["Player"]:<25}'
+            + f'{top_player_info["Score"]:.2f}'.ljust(15)
+        )
+
+        # Log results for the generation
+        self.generations_results.append({
+            "Generation": generation,
+            "Best Evo Player": top_evo_info["Player"],
+            "Evo Rank": int(top_evo_info["Rank"]),
+            "Evo Score": float(top_evo_info["Score"]),
+            "Best Player": top_player_info["Player"],
+            "Best Score": float(top_player_info["Score"])
+        })
+
+        # Remove 'Rank' before returning, as we only need 'Score' to sort in subsequent steps
+        sorted_evo_scores = evo_scores_df.drop(columns=["Rank"], errors="ignore")
+        return sorted_evo_scores
+
+
+    def train(self, axelrod: bool = False, crossover_strategy: str = "adaptive_weighted") -> EvoStrategy:
+        """
+        Conducts the evolutionary training over the specified number of generations.
+        Depending on 'absolute_fitness_eval_interval', some generations perform an 'absolute'
+        fitness evaluation, while others run a standard round-robin among evolutionary players only.
+
+        :param axelrod: If True, each player also competes against itself in each generation.
+        :param crossover_strategy: Strategy used to combine parent strategies (e.g., 'adaptive_weighted').
+        :return: The best evolutionary player after all generations.
         """
         print(f"\nTraining {self.num_evo_players} evolutionary strategies...\n")
-
-        results_data = []
-
-        header_line = (
-            f'{"Generation":<15}'
-            f'{"Best Evo":<20}'
-            f'{"(Rank, Score)":<20}'
-            f'{"Overall Best":<20}'
-            f'{"Score":<10}'
-        )
-        print("-" * len(header_line))
-        print(header_line)
-        print("-" * len(header_line))
-
-        # --- Generation 0: Evaluate the initial population ---
-        ranked_results_parents = self._play_tournament(self.fixed_players + self.evo_players, axelrod)
-        self.ranked_results = ranked_results_parents
-        
-        # Identify best among parents
-        evo_ranks = ranked_results_parents[
-            ranked_results_parents["Player"].isin([p.name for p in self.evo_players])
-        ].sort_values(by="Score", ascending=False, ignore_index=True)
-        
-        best_evo = evo_ranks.iloc[0]
-        overall_best = ranked_results_parents.iloc[0]
-        
+        print("-" * 90)
         print(
-            f'{0:<10}'
-            f'{best_evo["Player"]:<20}'
-            f'({int(best_evo["Rank"])}, {best_evo["Score"]:.2f})    '
-            f'{overall_best["Player"]:<20}'
-            f'{overall_best["Score"]:.2f}'
+            f'{"Generation":<15}'
+            f'{"Best Evo Player":<20}'
+            f'{"Evo Score":<15}'
+            f'{"Best Player":<20}'
+            f'{"Best Score":<15}'
         )
-
-        successes = 0
-        print_interval = max(1, self.generations // 5)
+        print("-" * 90)
 
         for generation in range(1, self.generations + 1):
-            print(f"\nGeneration {generation}:")
-            # 1) Create offspring
-            offspring = self._mutate_population()
+            # Determine which type of evaluation to run
+            # 1) Absolute: if at intervals or final generation
+            # 2) Evolutionary: standard round-robin among evo_players
+            if (
+                generation == 1
+                or generation % self.absolute_fitness_eval_interval == 0
+                or generation == self.generations
+            ):
+                # Evaluate each evolutionary player's performance against fixed players
+                df_ranked = self._evaluate_absolute_fitness(axelrod, generation)
+            else:
+                # Standard evolutionary tournament among evolutionary players only
+                df_ranked = self._play_tournament(self.evo_players, axelrod)
 
-            # 2) Evaluate parents + offspring in the same tournament (plus selection).
-            #    Or you could do two separate calls, but typically we want them all
-            #    together to get consistent scores for selection.
-            union = self.evo_players + offspring
-            print(f"Playing tournament with {len(union)} players...")
-            ranked_results_union = self._play_tournament(union, axelrod)
+            if generation < self.generations:
+                self._evolve_population(df_ranked, crossover_strategy)
 
-            # 3) Track how many offspring outperformed their parents
-            #    Because this is 1-to-1, we can zip them in order
-            parent_scores = {
-                p.name: ranked_results_union.loc[
-                    ranked_results_union["Player"] == p.name, "Score"
-                ].values[0]
-                for p in self.evo_players
-            }
-            offspring_scores = {
-                c.name: ranked_results_union.loc[
-                    ranked_results_union["Player"] == c.name, "Score"
-                ].values[0]
-                for c in offspring
-            }
+        # Final evaluation to identify the best evolutionary player
+        self.ranked_results = self._evaluate_absolute_fitness(axelrod, self.generations + 1)
 
-            gen_successes = 0
-            for p, c in zip(self.evo_players, offspring):
-                if offspring_scores[c.name] > parent_scores[p.name]:
-                    gen_successes += 1
-            
-            successes += gen_successes
-
-            # 4) Select the top num_evo_players from the union
-            #    Sort by Score desc, keep first num_evo_players that are Evo players
-            #    (since we only care about evolutionary players for selection)
-            union_df = ranked_results_union[
-                ranked_results_union["Player"].isin([x.name for x in union])
-            ].copy()
-            union_df.sort_values("Score", ascending=False, inplace=True, ignore_index=True)
-            
-            # Just pick the top self.num_evo_players
-            selected_evo_names = union_df.head(self.num_evo_players)["Player"].values
-            # Update self.evo_players
-            # We rely on matching by name
-            new_pop = []
-            for ev in union:
-                if ev.name in selected_evo_names:
-                    new_pop.append(ev)
-            self.evo_players = new_pop
-
-            # 5) Possibly adjust mutation rate using 1/5 rule
-            if generation % one_fifth_interval == 0:
-                # success_rate = #successes / (N * interval)
-                success_rate = successes / (self.num_evo_players * one_fifth_interval)
-                self._apply_one_fifth_rule(success_rate)
-                successes = 0  # reset
-
-            # 6) Track best evolutionary player of the new population
-            evo_ranks = union_df[
-                union_df["Player"].isin([p.name for p in self.evo_players])
-            ].head(self.num_evo_players)
-            evo_ranks.sort_values("Score", ascending=False, inplace=True, ignore_index=True)
-            top_evo = evo_ranks.iloc[0]
-            
-            # 7) Track overall best (including fixed players if you want)
-            #    The union included only the old parents + new children,
-            #    so if you want to see how they stack up against fixed players,
-            #    do a separate full eval or keep the same approach:
-            print(f"Playing full tournament with {len(self.fixed_players) + len(self.evo_players)} players...")
-            full_ranked = self._play_tournament(self.fixed_players + self.evo_players, axelrod)
-            best_player = full_ranked.iloc[0]  # overall best
-            self.ranked_results = full_ranked
-
-            # 8) Print / log results
-            if (generation % print_interval == 0) or (generation == self.generations):
-                print(
-                    f'{generation:<10}'
-                    f'{top_evo["Player"]:<20}'
-                    f'({int(top_evo["Rank"])}, {top_evo["Score"]:.2f})    '
-                    f'{best_player["Player"]:<20}'
-                    f'{best_player["Score"]:.2f}'
-                )
-            
-            results_data.append({
-                "Generation": generation,
-                "Best Evo Player": top_evo["Player"],
-                "Evo Rank": int(top_evo["Rank"]),
-                "Evo Score": float(top_evo["Score"]),
-                "Best Player": best_player["Player"],
-                "Best Score": float(best_player["Score"]),
-                "Mutation Rate": self.mutation_rate
-            })
-
-        print("-" * len(header_line))
+        print("-" * 90)
         print("\nEvolutionary training completed.\n")
 
-        # Store results
-        self.generations_results = pd.DataFrame(results_data)
-
-        # Return the best evolutionary strategy from the final round
-        # Re-evaluate the final pop vs. fixed players to get final ranks
-        final_ranked = self._play_tournament(self.fixed_players + self.evo_players, axelrod)
-        final_evo_ranks = final_ranked[
-            final_ranked["Player"].isin([p.name for p in self.evo_players])
-        ].copy()
-        final_evo_ranks.sort_values("Score", ascending=False, inplace=True, ignore_index=True)
-        best_evo_name = final_evo_ranks.iloc[0]["Player"]
-
+        best_evo_name = self.ranked_results.iloc[0]["Player"]
         self._best_evo_player = next(p for p in self.evo_players if p.name == best_evo_name)
         return self._best_evo_player
-        
+
+
     def get_best_evo_player(self) -> EvoStrategy:
         """
-        Returns the best evolutionary player found during training.
+        Retrieves the best evolutionary player determined at the end of training.
 
-        :return: The top EvoStrategy instance at the end of the last generation.
-        :raises ValueError: If `train()` has not been called yet (no best player identified).
+        :return: Reference to the top EvoStrategy.
+        :raises ValueError: If training hasn't been run and no best player is identified.
         """
         if self._best_evo_player is None:
-            raise ValueError("The evolutionary tournament has not been played yet.")
+            raise ValueError("No best evolutionary player found. Run 'train()' first.")
         return self._best_evo_player
+
 
     def get_generations_results(self) -> pd.DataFrame:
         """
-        Returns a DataFrame summarizing the results of each generation.
+        Returns a DataFrame summarizing the stored results for each generation.
 
-        The DataFrame columns include:
-            - 'Generation': Generation index (1-based).
-            - 'Best Evo Player': Name of top evolutionary player in that generation.
-            - 'Evo Rank': Rank of the top evolutionary player among all players.
-            - 'Evo Score': Score of the top evolutionary player.
-            - 'Best Player': Name of the top overall player in that generation.
-            - 'Best Score': Score of the top overall player.
+        Columns typically include:
+          'Generation', 'Best Evo Player', 'Evo Rank', 'Evo Score', 'Best Player', 'Best Score'.
 
-        :return: Pandas DataFrame of size (#logged_generations x 6).
-        :raises ValueError: If the training has not been run yet (DataFrame is empty).
+        :return: Pandas DataFrame with the logged generation results.
+        :raises ValueError: If no results are available (training not done).
         """
-        if self.generations_results.empty:
-            raise ValueError("The evolutionary tournament has not been played yet.")
-        return self.generations_results
+        if not self.generations_results:
+            raise ValueError("No results available. You must run 'train()' first.")
+        return pd.DataFrame(self.generations_results)
+
 
     def print_final_results(self) -> None:
         """
-        Prints the final ranked results of the last generation's tournament 
-        for all players (fixed and evolutionary).
+        Prints the final ranked results from the most recent tournament evaluation.
 
-        :raises ValueError: If the tournament has not been played yet (ranked_results empty).
+        :raises ValueError: If the tournament has never been played.
         """
         if self.ranked_results.empty:
-            raise ValueError("The evolutionary tournament has not been played yet.")
-        print(self.ranked_results.to_string(index=False))        
-        
+            raise ValueError("No tournament data available. Run 'train()' first.")
+        print(self.ranked_results.to_string(index=False))
