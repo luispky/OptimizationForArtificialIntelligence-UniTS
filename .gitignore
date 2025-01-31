@@ -1,0 +1,9 @@
+# Project-related
+figures/
+results/
+ideas/
+
+__pycache__/
+.idea/
+.vscode/
+.env
