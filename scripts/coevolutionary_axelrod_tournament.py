@@ -18,19 +18,25 @@ from src.strategies import (
     FirstByAnonymous,
 )
 from src.game import Tournament, CoevolutionaryIterativePrisonersDilemma
-from src.utils import plot_full_history_evo_player, plot_best_players
+from src.utils import (
+    plot_full_history_evo_player,
+    plot_best_players, 
+    set_seeds, 
+    print_statistics_evo_player
+)
+import numpy as np
 
 
 def coevolutionary_axelrod_tournament(
-    num_evo_players: int = 5,
+    num_evo_players: int = 16,
     action_history_size: int = 10,
     generations: int = 100,
     experiment: int = 1,
     save_fig: bool = True,
     crossover_strategy: str = "adaptive_weighted",
     elitism_proportion: float = 0.1,
-    crossover_probability: float = 0.95,
-    mutation_probability: float = 0.9,
+    crossover_probability: float = 0.8,
+    mutation_probability: float = 0.1,
     mutation_rate: float = 0.1,
     noise: float = 0.0,
     prob_end: float = 0.0,
@@ -60,6 +66,11 @@ def coevolutionary_axelrod_tournament(
         seed (Union[int, None]): Seed for reproducibility (if None, a random seed is used).
         absolute_fitness_eval_interval (int): Interval (in generations) for performing absolute fitness evaluations.
     """
+    # Set seeds for reproducibility
+    # seed = np.random.randint(0, 2**32 - 1) 
+    # print(f"Seed: {seed}")
+    set_seeds(seed)
+    
     # Initialize fixed (non-evolutionary) players
     fixed_players = [
         TitForTat(),
@@ -82,6 +93,8 @@ def coevolutionary_axelrod_tournament(
     # Create a descriptive suffix for file naming based on experiment parameters
     suffix = (
         f"COEVO"
+        f"_exp-{experiment}"
+        f"_seed-{seed}"
         f"_nevo-{num_evo_players}"
         f"_ahs-{action_history_size}"
         f"_gens-{generations}"
@@ -89,7 +102,6 @@ def coevolutionary_axelrod_tournament(
         f"_xprob-{crossover_probability}"
         f"_mprob-{mutation_probability}"
         f"_mrate-{mutation_rate}"
-        f"_exp-{experiment}"
     )
 
     # Initialize the evolutionary tournament using CoevolutionaryIterativePrisonersDilemma
@@ -114,12 +126,18 @@ def coevolutionary_axelrod_tournament(
         axelrod=True,
         crossover_strategy=crossover_strategy
     )
+    best_evo_player.save_strategy(suffix)
+
+    # Print the best evolutionary player's final genome
+    print(f"\n {best_evo_player.name} genome:\n" 
+          f"{np.round(best_evo_player.weights, 3)}\n")
 
     # Print final ranked results
     evolutionary_ipp.print_final_results()
 
     print("\nTesting Tournament with the best EvoStrategy")
     best_evo_player.reset_full_history()
+    best_evo_player.log_history = True
 
     # Run a test tournament including the best evolutionary player
     tournament = Tournament(
@@ -139,6 +157,8 @@ def coevolutionary_axelrod_tournament(
         filename=f"best_evo_player_history_{suffix}"
     )
 
+    print_statistics_evo_player(best_evo_player)
+    
     # Retrieve and plot the generation-by-generation results
     generations_results = evolutionary_ipp.get_generations_results()
     plot_best_players(
@@ -154,7 +174,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Evolutionary Axelrod Tournament with CoevolutionaryIterativePrisonersDilemma")
 
     # Evolutionary parameters
-    parser.add_argument("--num_evo_players", type=int, default=15, help="Number of EvoStrategy players")
+    parser.add_argument("--num_evo_players", type=int, default=16, help="Number of EvoStrategy players")
     parser.add_argument("--action_history_size", type=int, default=10, help="EvoStrategy history size")
     parser.add_argument("--generations", type=int, default=100, help="Number of generations")
     parser.add_argument("--elitism_proportion", type=float, default=0.1, help="Proportion of top evolutionary players to retain each generation")

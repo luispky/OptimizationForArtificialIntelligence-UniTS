@@ -2,6 +2,7 @@
 figures/
 results/
 ideas/
+strategies/
 
 __pycache__/
 .idea/

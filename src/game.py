@@ -8,6 +8,7 @@ from math import ceil, log
 from .strategies import Player
 from .evo_strategy import EvoStrategy
 from .utils import RandomNumberGenerator
+from collections import deque
 
 PAYOFF_MATRIX = {
     ('C', 'C'): (3, 3),
@@ -133,8 +134,9 @@ class Match:
         :return: A list of tuples representing the moves made in the match.
         """
         # Reset the players' states before starting the match.
-        self.players[0].reset()
-        self.players[1].reset()
+        player1, player2 = self.players
+        player1.reset()
+        player2.reset()
 
         # Determine the effective number of turns based on `prob_end`.
         effective_turns = self._get_effective_turns()
@@ -148,8 +150,8 @@ class Match:
         # Simulate each turn.
         for _ in range(effective_turns):
             # Get the moves for both players, potentially flipping them due to noise.
-            move1 = self._flip_action(self.players[0].strategy(self.players[1]))
-            move2 = self._flip_action(self.players[1].strategy(self.players[0]))
+            move1 = self._flip_action(player1.strategy(player2))
+            move2 = self._flip_action(player2.strategy(player1))
             
             # Record the moves.
             self.moves.append((move1, move2))
@@ -158,12 +160,17 @@ class Match:
             score1, score2 = PAYOFF_MATRIX[(move1, move2)]
             
             # Update each player's state and score.
-            self.players[0].update(move1, score1)
-            self.players[1].update(move2, score2)
+            player1.update(move1, score1)
+            player2.update(move2, score2)
 
         # Store the final scores and determine the winner.
-        self.final_scores = (self.players[0].score, self.players[1].score)
+        self.final_scores = (player1.score, player2.score)
         self.winner = self._determine_winner()
+        
+        # If any of the players is EvoStrategy and log_history is True log the count of wins, losses and ties
+        for player in self.players:
+            if isinstance(player, EvoStrategy):
+                player.update_log_match_results(self.winner)
 
         return self.moves
 
@@ -455,7 +462,7 @@ class GAIterativePrisonersDilemma:
         elites = self.evo_players[:self.num_elite_players]
 
         # Generate offspring from the entire (sorted) evo player set
-        offspring = self._generate_offspring(df_ranked=sorted_evo_scores, strategy=crossover_strategy)
+        offspring = self._generate_offspring(df_ranked=sorted_evo_scores, crossover_strategy=crossover_strategy)
 
         # Combine elites and newly produced offspring
         self.evo_players = elites + offspring
@@ -521,7 +528,11 @@ class GAIterativePrisonersDilemma:
         :param crossover_strategy: Strategy for combining parent weights (e.g., 'adaptive_weighted').
         :return: Reference to the best evolutionary player after final generation.
         """
-        print(f"\nTraining {self.num_evo_players} evolutionary strategies...\n")
+        # Early stop if the best evo policy is not in the top 3 for 5 consecutive check points
+        top_evo_ranks: deque[int] = deque(maxlen=5)
+        early_stop = False
+        
+        print(f"\nTraining {self.num_evo_players} evolutionary players...\n")
         results_data = []
 
         # Display table header for intermediate results
@@ -567,6 +578,19 @@ class GAIterativePrisonersDilemma:
                     f"{top_player['Player']:<25}" +
                     f"{top_player['Score']:.2f}".ljust(15)
                 )
+                
+                # Early stopping condition
+                top_evo_ranks.append(top_evo["Rank"])
+                if len(top_evo_ranks) == 5: 
+                    tmp = list(top_evo_ranks)
+                    first_three_below_5 = all(rank <= 5 for rank in tmp[:3])
+                    last_two_above_3 = all(rank > 3 for rank in tmp[3:])
+                    decreasing_trend = tmp[-1] > tmp[-2] > tmp[-3]
+
+                    if first_three_below_5 and not last_two_above_3 and decreasing_trend:
+                        print("\nEarly stopping: training will likely not converge. "
+                            "Best evolutionary player is getting worse or stagnating.")
+                        early_stop = True                    
 
             # Evolve the population unless we're at the final generation
             if generation < self.generations:
@@ -574,7 +598,8 @@ class GAIterativePrisonersDilemma:
                 self._evolve_population(sorted_evo_scores, crossover_strategy)
 
         print("-" * 90)
-        print("\nEvolutionary training completed.\n")
+        if not early_stop:
+            print("\nEvolutionary training completed.\n")
 
         # Store the generation-by-generation results
         self.generations_results = pd.DataFrame(results_data)
@@ -792,7 +817,9 @@ class CoevolutionaryIterativePrisonersDilemma:
         return offspring
 
 
-    def _evaluate_absolute_fitness(self, axelrod: bool, generation: int) -> pd.DataFrame:
+    def _evaluate_absolute_fitness(self, axelrod: bool,
+                                   generation: int
+    ) -> Tuple[pd.DataFrame, int]:
         """
         Performs an 'absolute fitness' evaluation of each evolutionary player against
         all fixed players individually, logs best performers, and returns sorted scores.
@@ -842,10 +869,14 @@ class CoevolutionaryIterativePrisonersDilemma:
 
         # Remove 'Rank' before returning, as we only need 'Score' to sort in subsequent steps
         sorted_evo_scores = evo_scores_df.drop(columns=["Rank"], errors="ignore")
-        return sorted_evo_scores
+        return sorted_evo_scores, top_evo_info["Rank"]
+    
 
-
-    def train(self, axelrod: bool = False, crossover_strategy: str = "adaptive_weighted") -> EvoStrategy:
+    def train(
+            self,
+            axelrod: bool = False,
+            crossover_strategy: str = "adaptive_weighted"
+    ) -> EvoStrategy:
         """
         Conducts the evolutionary training over the specified number of generations.
         Depending on 'absolute_fitness_eval_interval', some generations perform an 'absolute'
@@ -855,7 +886,11 @@ class CoevolutionaryIterativePrisonersDilemma:
         :param crossover_strategy: Strategy used to combine parent strategies (e.g., 'adaptive_weighted').
         :return: The best evolutionary player after all generations.
         """
-        print(f"\nTraining {self.num_evo_players} evolutionary strategies...\n")
+        # Early stop if the best evo policy is not in the top 3 for 5 consecutive check points
+        top_evo_ranks: deque[int] = deque(maxlen=5)
+        early_stop = False
+        
+        print(f"\nTraining {self.num_evo_players} evolutionary players...\n")
         print("-" * 90)
         print(
             f'{"Generation":<15}'
@@ -876,7 +911,20 @@ class CoevolutionaryIterativePrisonersDilemma:
                 or generation == self.generations
             ):
                 # Evaluate each evolutionary player's performance against fixed players
-                df_ranked = self._evaluate_absolute_fitness(axelrod, generation)
+                df_ranked, top_evo_rank = self._evaluate_absolute_fitness(axelrod, generation)
+                
+                # Early stopping condition
+                top_evo_ranks.append(top_evo_rank)
+                if len(top_evo_ranks) == 5: 
+                    tmp = list(top_evo_ranks)
+                    first_three_below_5 = all(rank <= 5 for rank in tmp[:3])
+                    last_two_above_3 = all(rank > 3 for rank in tmp[3:])
+                    decreasing_trend = tmp[-1] > tmp[-2] > tmp[-3]
+
+                    if first_three_below_5 and not last_two_above_3 and decreasing_trend:
+                        print("\nEarly stopping: training will likely not converge. "
+                            "Best evolutionary player is getting worse or stagnating.")
+                        early_stop = True
             else:
                 # Standard evolutionary tournament among evolutionary players only
                 df_ranked = self._play_tournament(self.evo_players, axelrod)
@@ -885,10 +933,11 @@ class CoevolutionaryIterativePrisonersDilemma:
                 self._evolve_population(df_ranked, crossover_strategy)
 
         # Final evaluation to identify the best evolutionary player
-        self.ranked_results = self._evaluate_absolute_fitness(axelrod, self.generations + 1)
+        self.ranked_results, _ = self._evaluate_absolute_fitness(axelrod, self.generations + 1)
 
         print("-" * 90)
-        print("\nEvolutionary training completed.\n")
+        if not early_stop:
+            print("\nEvolutionary training completed.\n")
 
         best_evo_name = self.ranked_results.iloc[0]["Player"]
         self._best_evo_player = next(p for p in self.evo_players if p.name == best_evo_name)

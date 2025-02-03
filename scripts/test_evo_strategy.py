@@ -9,8 +9,9 @@ from src.strategies import (
 )
 from src.game import Match, Tournament
 from src.evo_strategy import EvoStrategy
-from src.utils import plot_full_history_evo_player
+from src.utils import plot_full_history_evo_player, print_statistics_evo_player
 import argparse
+import numpy as np
 
 
 def match_against_evo(player: Player, turns: int, evo_action_history_size: int) -> None:
@@ -25,12 +26,13 @@ def match_against_evo(player: Player, turns: int, evo_action_history_size: int) 
     print(f"\n{player.name} vs EvoStrategy")
     players = [player, EvoStrategy(name="Evo", action_history_size=evo_action_history_size, log_history=True)]
     match = Match(players, turns=turns)
-    moves = match.play()
-    print(f"Moves:\n{moves}")
+    _ = match.play()
     print(f"Winner: {match.winner}")
     print(f"Final scores: {match.final_scores}")
+    print_statistics_evo_player(players[1])
     plot_full_history_evo_player(players[1])
     print("\n" + "-" * 50)
+
 
 def test_match(turns: int, evo_action_history_size: int) -> None:
     """
@@ -64,17 +66,23 @@ def test_tournament(
     print("\nTesting Tournament class with one EvoStrategy")
     for action_history_size in action_history_sizes:
         print(f"\nResults for EvoStrategy with action history size = {action_history_size}")
+        evo_player = EvoStrategy(name="Evo", action_history_size=action_history_size)
+        evo_player.log_history = True
         players = [
             Cooperator(),
             Defector(),
             Alternator(),
             TitForTat(),
             Random(),
-            EvoStrategy(name="Evo", action_history_size=action_history_size),
+            evo_player,
         ]
         tournament = Tournament(players, turns=turns, repetitions=repetitions, prob_end=prob_end)
         tournament.play(axelrod=True)
         tournament.print_ranked_results()
+        
+        print(f'\n {evo_player.name} genome: {np.round(evo_player.weights, 2)}')
+        print_statistics_evo_player(evo_player)
+        
         plot_full_history_evo_player([p for p in players if p.name == "Evo"][0])
         print("\n" + "-" * 50)
 

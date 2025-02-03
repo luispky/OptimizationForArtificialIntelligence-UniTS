@@ -2,6 +2,8 @@ import numpy as np
 import random
 import matplotlib.pyplot as plt
 import os
+from tabulate import tabulate
+
 
 def set_seeds(seed):
     np.random.seed(seed)
@@ -43,56 +45,157 @@ class RandomNumberGenerator:
         return self.rng.choice(x, size=size, replace=replace, p=p)
 
 
-def plot_full_history_evo_player(player, save_fig=False, filename=None):
-    """Plots the binary history of a player's actions in the last match as a scatter plot."""
+def get_binary_histories(player):
+    """Returns the logged history of an EvoStrategy player and its opponents as binary values.
     
-    # Map actions to binary values
+    The actions are converted using the mapping: 'C' -> 0 and 'D' -> 1.
+    The '*' symbols (indicating the start of a match) are removed from the histories
+    but their positions are recorded and returned.
+    """
     action_map = {'C': 0, 'D': 1}
-    full_history = player.get_full_history()
+    full_history, opponents_full_history = player.full_history
+    
+    # Find positions of the '*' markers (match start) in each history
+    start_positions = [i for i, action in enumerate(full_history) if action == '*']
+    start_positions_opponents = [i for i, action in enumerate(opponents_full_history) if action == '*']
+    
+    # Remove all '*' markers from the histories
+    full_history = [action for action in full_history if action != '*']
+    opponents_full_history = [action for action in opponents_full_history if action != '*']
+    
+    # Convert actions to binary values
     history_binary = [action_map[action] for action in full_history]
+    opponents_history_binary = [action_map[action] for action in opponents_full_history]
+    
+    return history_binary, opponents_history_binary, start_positions, start_positions_opponents
 
-    # Create the scatter plot
-    fig, ax = plt.subplots(figsize=(8, 4))
-    ax.scatter(range(len(history_binary)), history_binary, color='red', label="Actions", s=50)
 
-    # Adjust x-ticks: show max 8 evenly spaced ticks
-    if len(history_binary) > 8:
-        step = max(1, len(history_binary) // 7)  # Divide into 7 intervals for 8 ticks
-        xticks = list(range(0, len(history_binary), step))  # Generate ticks
-        
+def adjust_xticks(ax, history_length):
+    """
+    Adjusts the x-ticks of an axis to show a maximum of 8 evenly spaced ticks.
+    """
+    if history_length > 8:
+        step = max(1, history_length // 7)
+        xticks = list(range(0, history_length, step))
         # Ensure the last tick is included if it's not too close to the previous tick
-        if len(history_binary) - 1 not in xticks:
-            if len(history_binary) - 1 - xticks[-1] > step // 2:  # Add only if far enough
-                xticks.append(len(history_binary) - 1)
+        if (history_length - 1) not in xticks:
+            if history_length - 1 - xticks[-1] > step // 2:
+                xticks.append(history_length - 1)
         ax.set_xticks(xticks)
     else:
-        ax.set_xticks(range(len(history_binary)))
+        ax.set_xticks(range(history_length))
 
-    # Add labels and title
-    ax.set_title(f"Player Action History: {player.name}", fontsize=14, pad=15)
-    ax.set_xlabel("Turns", fontsize=12)
-    ax.set_ylabel("Actions", fontsize=12)
-    ax.set_yticks([0, 1])
-    ax.set_yticklabels(['Cooperate', 'Defect'], fontsize=10)
-    ax.tick_params(axis='both', which='major', labelsize=10)
 
-    # Add grid for readability
-    ax.grid(axis='x', linestyle='--', alpha=0.7)
+def add_match_start_lines(ax, positions):
+    """
+    Adds vertical dashed lines to the axis at each position specified in positions.
+    """
+    for pos in positions:
+        ax.axvline(x=pos, color='black', linestyle='--', alpha=0.5)
 
-    # Add a legend
-    ax.legend(loc='upper right', fontsize=10)
 
-    # Fix layout
+def plot_full_history_evo_player(player, save_fig=False, filename=None):
+    """
+    Plots the binary history of a player's and its opponent's actions as scatter plots 
+    in a 2x1 figure. Vertical dashed lines indicate the start of each match.
+
+    - The player's history is plotted in the top subplot (red markers).
+    - The opponent's history is plotted in the bottom subplot (blue markers).
+    """
+    # Get binary histories and match-start positions
+    history_binary, opponents_history_binary, start_positions, start_positions_opponents = get_binary_histories(player)
+    
+    # Create a 2x1 figure with shared x-axis
+    fig, axes = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
+    
+    # --- Top Subplot: Player's History ---
+    ax_player = axes[0]
+    ax_player.scatter(range(len(history_binary)), history_binary, color='red', label="Player Actions", s=50)
+    add_match_start_lines(ax_player, start_positions)
+    adjust_xticks(ax_player, len(history_binary))
+    
+    ax_player.set_title(f"EvoStrategy {player.name} Actions: ", fontsize=14, pad=15)
+    ax_player.set_ylabel("Actions", fontsize=12)
+    ax_player.set_yticks([0, 1])
+    ax_player.set_yticklabels(['Cooperate', 'Defect'], fontsize=10)
+    ax_player.grid(axis='x', linestyle='--', alpha=0.7)
+    ax_player.legend(loc='upper right', fontsize=10)
+    
+    # --- Bottom Subplot: Opponent's History ---
+    ax_opponent = axes[1]
+    ax_opponent.scatter(range(len(opponents_history_binary)), opponents_history_binary, color='blue', label="Opponent Actions", s=50)
+    add_match_start_lines(ax_opponent, start_positions_opponents)
+    adjust_xticks(ax_opponent, len(opponents_history_binary))
+    
+    ax_opponent.set_title("Opponent Actions", fontsize=14, pad=15)
+    ax_opponent.set_xlabel("Turns", fontsize=12)
+    ax_opponent.set_ylabel("Actions", fontsize=12)
+    ax_opponent.set_yticks([0, 1])
+    ax_opponent.set_yticklabels(['Cooperate', 'Defect'], fontsize=10)
+    ax_opponent.grid(axis='x', linestyle='--', alpha=0.7)
+    ax_opponent.legend(loc='upper right', fontsize=10)
+    
+    # Adjust layout for readability
     plt.tight_layout()
-
+    
+    # Save or display the figure
     if save_fig:
         if not filename:
             raise ValueError("Filename must be provided when save_fig is True")
         os.makedirs("figures", exist_ok=True)
         plt.savefig(f"figures/{filename}.png", bbox_inches='tight')
+        plt.close()
+    else:
+        plt.show()
+
+
+def print_statistics_evo_player(player) -> None:
+    """
+    Compute and print EvoStrategy player statistics using tabulate.
     
-    # Show the plot
-    plt.show() if not save_fig else plt.close()
+    Parameters:
+        player: EvoStrategy instance.
+    """
+    history_binary, opponents_history_binary, _, _ = get_binary_histories(player)
+    
+    # Calculate player's statistics
+    cooperation_rate = history_binary.count(0) / len(history_binary) * 100
+    defection_rate = history_binary.count(1) / len(history_binary) * 100
+    cooperation_defection_ratio = (
+        cooperation_rate / defection_rate if defection_rate > 0 else cooperation_rate
+    )
+    wins, losses, ties = player.log_match_results
+    matches = wins + losses + ties
+    
+    # Calculate opponent's statistics
+    cooperation_rate_opponent = opponents_history_binary.count(0) / len(opponents_history_binary) * 100
+    defection_rate_opponent = opponents_history_binary.count(1) / len(opponents_history_binary) * 100
+    cooperation_defection_ratio_opponent = (
+        cooperation_rate_opponent / defection_rate_opponent if defection_rate_opponent > 0 else cooperation_rate_opponent
+    )
+    
+    # Prepare data for tabulate
+    player_data = [
+        ["Wins", wins],
+        ["Losses", losses],
+        ["Ties", ties],
+        ["Matches", matches],
+        ["Cooperation Rate", f"{cooperation_rate:.2f}%"],
+        ["Defection Rate", f"{defection_rate:.2f}%"],
+        ["Cooperation-Defection Ratio", f"{cooperation_defection_ratio:.2f}"]
+    ]
+    
+    opponent_data = [
+        ["Cooperation Rate", f"{cooperation_rate_opponent:.2f}%"],
+        ["Defection Rate", f"{defection_rate_opponent:.2f}%"],
+        ["Cooperation-Defection Ratio", f"{cooperation_defection_ratio_opponent:.2f}"]
+    ]
+    
+    print(f"\nPlayer {player.name} Statistics in the Tournament:")
+    print(tabulate(player_data, tablefmt="github"))
+    print("\nOpponents Statistics:")
+    print(tabulate(opponent_data, tablefmt="github"))
+
 
 
 def plot_best_players(generation_results, save_fig=False, filename=None):

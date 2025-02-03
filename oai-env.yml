@@ -9,6 +9,7 @@ dependencies:
   - scikit-learn
   - scipy
   - matplotlib
+  - tabulate
   - pip
   - pip:
       - axelrod
