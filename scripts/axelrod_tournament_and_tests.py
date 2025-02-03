@@ -90,6 +90,10 @@ def test_tournament():
     
     tournament.print_ranked_results()
     
+    print("\n Per Match Results")
+    for player, scores in tournament.scores.items():
+        print(f"\n{player}: {scores}")
+    
     print(f"\n{'-'*75}")
 
 
@@ -112,12 +116,13 @@ def test_tournament_axl_library():
     results = tournament.play(progress_bar=False)
     
     # Calculate the mean results
-    mean_results = np.array(results.scores).mean(axis=1)/len(players)
-
+    mean_results = np.array(results.scores).mean(axis=1)/(len(players)-1)
+    mean_results = np.sort(mean_results)[::-1]
+    
     # Create a dictionary of sorted mean results
     sorted_mean_results = {
         name: mean_results[i] 
-        for name, i in zip(results.ranked_names, results.ranking)
+        for i, name in enumerate(results.ranked_names)
     }
     
     print(f'{"Rank":>5} {"Name":>45} {"Score":>8}')
@@ -194,12 +199,13 @@ def axelrod_tournament_axl_library():
     results = tournament.play(progress_bar=False)
     
     # Calculate the mean results
-    mean_results = np.array(results.scores).mean(axis=1)/len(players)
-
+    mean_results = np.array(results.scores).mean(axis=1)/(len(players)-1)
+    mean_results = np.sort(mean_results)[::-1]
+    
     # Create a dictionary of sorted mean results
     sorted_mean_results = {
         name: mean_results[i] 
-        for name, i in zip(results.ranked_names, results.ranking)
+        for i, name in enumerate(results.ranked_names)
     }
     
     print(f'{"Rank":>5} {"Name":>45} {"Score":>8}')
@@ -214,6 +220,7 @@ def axelrod_tournament_axl_library():
     print(f"\n{'-'*75}")
 
     input("\nPress Enter to close the plot")
+
 
 # Main function to handle argument parsing and running specific tests
 def main(args_):

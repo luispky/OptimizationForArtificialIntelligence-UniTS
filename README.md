@@ -83,13 +83,6 @@
     ├── evo_strategy.py
     ├── game.py
     ├── __init__.py
-    ├── __pycache__
-    │   ├── evo_strategy.cpython-312.pyc
-    │   ├── game.cpython-312.pyc
-    │   ├── game_ga.cpython-312.pyc
-    │   ├── __init__.cpython-312.pyc
-    │   ├── strategies.cpython-312.pyc
-    │   └── utils.cpython-312.pyc
     ├── strategies.py
     └── utils.py
 ```

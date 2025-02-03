@@ -22,7 +22,7 @@ class EvoStrategy(Player):
         name = name or self._generate_name()
         super().__init__(name)
         self.parents: Tuple[str, str] = ('', '')  # Track parent names
-        self.stochastic = True
+        self.stochastic = False # We use distributions only to initialize the weights and then for mutation and crossover
 
         # Determine state_size based on action_history_size
         if action_history_size > 0:
@@ -30,7 +30,7 @@ class EvoStrategy(Player):
         else:
             self.state_size = 6  # Only the existing state variables
 
-        self.weights = self._rng.normal(0, 1, self.state_size)
+        self._weights = self._rng.normal(0, 1, self.state_size)
         self._state_scaler = MinMaxScaler()
         self._state = np.zeros(self.state_size, dtype=np.float64)
 
@@ -52,6 +52,9 @@ class EvoStrategy(Player):
 
         self.log_history = log_history
         self._full_history = []
+        self._opponent_history = []
+        # Number of matches won, lost, and tied
+        self._log_match_results: List[int, int, int] = [0, 0, 0]
 
     @classmethod
     def _generate_name(cls) -> str:
@@ -65,7 +68,19 @@ class EvoStrategy(Player):
     def _record_lineage(cls, offspring_name: str, parent1_name: str, parent2_name: str) -> None:
         """Records the lineage of an offspring."""
         cls.lineage.append((offspring_name, parent1_name, parent2_name))
-
+        
+    
+    @property
+    def weights(self) -> np.ndarray:
+        """Retrieves the weights of the EvoStrategy."""
+        return self._weights
+    
+    
+    @weights.setter
+    def weights(self, weights: np.ndarray) -> None:
+        """Sets the weights of the EvoStrategy."""
+        self._weights = weights
+        
 
     def get_state(self, opponent: Player) -> np.ndarray:
         """Generates the current state vector for this strategy."""
@@ -116,25 +131,52 @@ class EvoStrategy(Player):
     def strategy(self, opponent: Player) -> str:
         """Determines the next move ('C' or 'D') based on the current state."""
         self.get_state(opponent)
-        action = 'C' if np.dot(self.weights, self._state) >= 0 else 'D'
+        action = 'C' if np.dot(self._weights, self._state) >= 0 else 'D'
         if self.log_history:
-            self._full_history.append(action)
+            # New opponent
+            if not opponent.history:
+                self._opponent_history.append('*')    
+            else:
+                self._opponent_history.append(opponent.history[-1])
+            
+            if not self.history:
+                self._full_history.append('*')
+            else:
+                self._full_history.append(action)
+            
         return action
 
 
     def reset_full_history(self) -> None:
         """Resets the full history of actions."""
         self._full_history = []
+        self._opponent_history = []
+        self._log_match_results = [0, 0, 0]
+        
+    
+    def update_log_match_results(self, match_winner: str) -> None:
+        """Updates the match results for the strategy."""
+        if match_winner == self.name:
+            self._log_match_results[0] += 1
+        elif match_winner == 'Tie':
+            self._log_match_results[2] += 1
+        else:
+            self._log_match_results[1] += 1
 
+    @property
+    def log_match_results(self) -> List[int, int, int]:
+        """Retrieves the match results for the strategy."""
+        return self._log_match_results
 
-    def get_full_history(self) -> List[str]:
+    @property
+    def full_history(self) -> Tuple[List[str], List[str]]:
         """Retrieves the full history of actions."""
-        return self._full_history
+        return self._full_history, self._opponent_history
 
 
     def mutate(self, mutation_rate: float) -> None:
         """Applies mutation to the weights."""
-        self.weights += self._rng.normal(0, mutation_rate, self.state_size)
+        self._weights += self._rng.normal(0, mutation_rate, self.state_size)
 
 
     def crossover(self, other: EvoStrategy, strategy: str = "adaptive_weighted") -> Tuple[EvoStrategy, EvoStrategy]:
@@ -161,12 +203,12 @@ class EvoStrategy(Player):
         if strategy == "adaptive_weighted":
             total_score = self.score + other.score
             alpha = self.score / total_score if total_score > 0 else 0.5
-            offspring1.weights = alpha * self.weights + (1 - alpha) * other.weights
-            offspring2.weights = (1 - alpha) * self.weights + alpha * other.weights
+            offspring1.weights = alpha * self._weights + (1 - alpha) * other.weights
+            offspring2.weights = (1 - alpha) * self._weights + alpha * other.weights
         elif strategy == "BLX-alpha":
             alpha = 0.5  # Adjustable parameter
-            min_weights = np.minimum(self.weights, other.weights)
-            max_weights = np.maximum(self.weights, other.weights)
+            min_weights = np.minimum(self._weights, other.weights)
+            max_weights = np.maximum(self._weights, other.weights)
             range_weights = max_weights - min_weights
             offspring1.weights = self._rng.uniform(min_weights - alpha * range_weights,
                                                   max_weights + alpha * range_weights)
@@ -174,19 +216,19 @@ class EvoStrategy(Player):
                                                   max_weights + alpha * range_weights)
         elif strategy == "random_subset":
             mask = self._rng.rand(self.state_size) > 0.5
-            offspring1.weights = np.where(mask, self.weights, other.weights)
-            offspring2.weights = np.where(mask, other.weights, self.weights)
+            offspring1.weights = np.where(mask, self._weights, other.weights)
+            offspring2.weights = np.where(mask, other.weights, self._weights)
         else:
             raise ValueError("Unsupported crossover strategy.")
 
         return offspring1, offspring2
     
     
-    def save_strategy(self) -> None:
+    def save_strategy(self, filename) -> None:
         """Saves an EvoStrategy instance using pickle."""
         if not os.path.exists('strategies'):
             os.makedirs('strategies')
-        filepath = f'strategies/{self.name}.pkl'
+        filepath = f'strategies/{filename}_{self.name}.pkl'
         with open(filepath, 'wb') as file:
             pickle.dump(self, file)
 

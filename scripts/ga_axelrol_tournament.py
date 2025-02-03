@@ -18,7 +18,13 @@ from src.strategies import (
     FirstByAnonymous,
 )
 from src.game import Tournament, GAIterativePrisonersDilemma
-from src.utils import plot_full_history_evo_player, plot_best_players
+from src.utils import (
+    plot_full_history_evo_player,
+    plot_best_players, 
+    set_seeds, 
+    print_statistics_evo_player
+)
+import numpy as np
 
 
 def ga_axelrod_tournament(
@@ -29,7 +35,7 @@ def ga_axelrod_tournament(
     save_fig: bool = True,
     crossover_strategy: str = "adaptive_weighted",
     elitism_proportion: float = 0.1,
-    crossover_probability: float = 0.95,
+    crossover_probability: float = 0.8,
     mutation_probability: float = 0.1,
     mutation_rate: float = 0.1,
     noise: float = 0.0,
@@ -57,6 +63,11 @@ def ga_axelrod_tournament(
         test_repetitions (int): Number of repetitions for testing the best EvoStrategy.
         seed (int): Seed for reproducibility (if None, a random seed is used).
     """
+    # Set seeds for reproducibility
+    # seed = np.random.randint(0, 2**32 - 1) 
+    # print(f"Seed: {seed}")
+    set_seeds(seed)
+    
     # Initialize fixed (non-evolutionary) players
     fixed_players = [
         TitForTat(),
@@ -79,6 +90,8 @@ def ga_axelrod_tournament(
     # Create a suffix for file naming based on experiment parameters
     suffix = (
         f"GA"
+        f"_exp-{experiment}"
+        f"_seed-{seed}"
         f"_nevo-{num_evo_players}"
         f"_ahs-{action_history_size}"
         f"_gens-{generations}"
@@ -86,7 +99,6 @@ def ga_axelrod_tournament(
         f"_xprob-{crossover_probability}"
         f"_mprob-{mutation_probability}"
         f"_mrate-{mutation_rate}"
-        f"_exp-{experiment}"
     )  
 
     # Initialize the evolutionary tournament with updated parameters
@@ -110,7 +122,13 @@ def ga_axelrod_tournament(
         axelrod=True,
         crossover_strategy=crossover_strategy
     )
+    best_evo_player.save_strategy(suffix)
+    
+    # Print the best evolutionary player's final genome
+    print(f"\n {best_evo_player.name} genome:\n" 
+          f"{np.round(best_evo_player.weights, 3)}\n")
 
+    # Print final ranked results
     evolutionary_ipp.print_final_results()
 
     print("\nTesting Tournament with the best EvoStrategy")
@@ -134,7 +152,10 @@ def ga_axelrod_tournament(
         save_fig=save_fig,
         filename=f"best_evo_player_history_{suffix}"
     )
+    
+    print_statistics_evo_player(best_evo_player)
 
+    # Retrieve and plot the generation-by-generation results
     generations_results = evolutionary_ipp.get_generations_results()
     plot_best_players(
         generations_results,
@@ -164,10 +185,10 @@ if __name__ == "__main__":
     parser.add_argument("--noise", type=float, default=0.0, help="Probability of introducing noise in players' actions")
 
     # Experiment parameters
-    parser.add_argument("--experiment", type=int, default=3, help="Experiment identifier for saving files")
+    parser.add_argument("--experiment", type=int, default=1, help="Experiment identifier for saving files")
     parser.add_argument("--test_repetitions", type=int, default=10, help="Number of repetitions for testing the best EvoStrategy")
     parser.add_argument("--save_fig", type=bool, default=True, help="Save figures as files")
-    parser.add_argument("--seed", type=int, default=42, help="Seed for reproducibility (if None, a random seed is used)")
+    parser.add_argument("--seed", type=int, default=3487522376, help="Seed for reproducibility (if None, a random seed is used)")
 
     args = parser.parse_args()
 
