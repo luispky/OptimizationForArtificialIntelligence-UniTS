@@ -144,7 +144,7 @@ To ensure that all scripts run correctly, make sure your environment is set up p
 2. **Conda Environment in PATH**:  
    Ensure the path to your Conda environment is in your `PATH`. For example:
    ```bash
-   export PATH=/path/to/anaconda3/envs/oai-env/bin:$PATH
+   export PATH=/path/to/anaconda3/envs/OAI/bin:$PATH
    ```
    This ensures you are using the correct Python interpreter and dependencies.
 
