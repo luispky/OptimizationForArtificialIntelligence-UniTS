@@ -29,6 +29,7 @@
   - [About the Project](#about-the-project)
     - [Project Description](#project-description)
     - [Project Structure](#project-structure)
+    - [Slides](#slides)
     - [Built With](#built-with)
   - [Getting Started](#getting-started)
     - [Prerequisites](#prerequisites)
@@ -98,9 +99,9 @@
   - **`game.py`**: Contains the `Match`, `Tournament`, `GAIteratedPrisonersDilemma`, and `CoevolutionaryIteratedPrisonersDilemma` classes.
   - **`utils.py`**: Contains utility functions.
 
-<!-- ### Slides
+### Slides
 
-📑 View the project presentation slides [here](). -->
+📑 View the project presentation slides [here](https://docs.google.com/presentation/d/15GDoMSCmhxDJbj0pptW-3bL7dc2x_fR5Mxz1xXzAHRA/edit?usp=sharing).
 
 ### Built With
 
