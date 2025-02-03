@@ -124,7 +124,7 @@ Follow these steps to set up the project environment. 🚀
 
 ```bash
 conda env create -f oai-env.yml
-conda activate oai-env
+conda activate OAI
 ```
 
 ### Environment Configuration
