@@ -68,7 +68,19 @@
 
 ### Project Description
 
-🔍 This project addresses the problem of evolving strategies for the Iterated Prisoner's Dilemma. The Iterated Prisoner's Dilemma is a game in which two players interact repeatedly, and in each round they can choose to cooperate or defect. The players receive a payoff based on their choices, and the game is played for a certain number of rounds. The goal is to maximize the total payoff over the course of the game. Here, the aim is to evolve strategies that outperform those presented in the computer tournament described in the [Effective Choice in the Prisoner’s Dilemma](https://www.jstor.org/stable/173932) paper by Robert Axelrod.
+🔍 This project explores the evolution of strategies for the *Iterated Prisoner’s Dilemma* (IPD), a repeated game where two players independently choose to either **cooperate** or **defect** in each turn. Payoffs depend on both players’ decisions, and the objective is to **maximize the cumulative payoff** across many turns.
+
+The work is inspired by Robert Axelrod’s influential computer tournaments described in [*Effective Choice in the Prisoner’s Dilemma*](https://www.jstor.org/stable/173932), in which:
+
+* `N` strategies (15 in Axelrod’s first tournament) compete in a **round-robin** format, including self-play.
+* Each match lasts a **stochastic number of turns**.
+* Final scores are averaged over multiple tournaments (e.g., 5 runs in Axelrod’s study) to ensure **robust evaluation**.
+
+🔧 **Key Contributions**:
+
+* Introduced **additional strategies** beyond Axelrod’s original set.
+* Used **Genetic Algorithms (GAs)** and **Evolutionary Strategies (ES)** to evolve players with the aim of discovering adaptive and competitive behavior.
+* Evaluated evolved strategies against fixed players to assess relative performance, with a focus on **learning dynamics** in addition to outperforming baseline strategies.
 
 ### Project Structure
 
